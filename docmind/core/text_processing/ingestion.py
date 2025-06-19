@@ -27,6 +27,12 @@ except ImportError:
 
 from docmind.models.schemas import DocumentStatus, DocumentResponse
 from docmind.config.settings import settings
+from docmind.core.exceptions import (
+    DocumentValidationError, 
+    DocumentNotFoundError, 
+    TextExtractionError,
+    FileStorageError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +62,20 @@ class DocumentIngestionService:
     
     def _ensure_storage_dirs(self):
         """Ensure storage directories exist"""
-        os.makedirs(settings.upload_dir, exist_ok=True)
-        os.makedirs(settings.temp_dir, exist_ok=True)
-        logger.info(f"Storage directories ensured: {settings.upload_dir}, {settings.temp_dir}")
+        try:
+            os.makedirs(settings.upload_dir, exist_ok=True)
+            os.makedirs(settings.temp_dir, exist_ok=True)
+            logger.info(f"Storage directories ensured: {settings.upload_dir}, {settings.temp_dir}")
+        except Exception as e:
+            logger.error(f"Failed to create storage directories: {e}")
+            raise FileStorageError("Failed to create storage directories", str(e))
     
     def _get_file_path(self, document_id: str, filename: str) -> str:
         """Generate file path for storage"""
         file_extension = Path(filename).suffix.lower()
         return os.path.join(settings.upload_dir, f"{document_id}{file_extension}")
     
-    def validate_file(self, filename: str, file_size: int) -> Tuple[bool, str]:
+    def validate_file(self, filename: str, file_size: int):
         """
         Validate uploaded file for format and size
         
@@ -73,11 +83,11 @@ class DocumentIngestionService:
             filename: Name of the uploaded file
             file_size: Size of the file in bytes
             
-        Returns:
-            Tuple of (is_valid, error_message)
+        Raises:
+            DocumentValidationError: If validation fails
         """
         if not filename:
-            return False, "Имя файла не может быть пустым"
+            raise DocumentValidationError("Имя файла не может быть пустым")
         
         # Check file extension
         file_path = Path(filename)
@@ -85,14 +95,16 @@ class DocumentIngestionService:
         
         if file_extension not in self.supported_extensions:
             supported = ', '.join(self.supported_extensions)
-            return False, f"Неподдерживаемый формат файла. Поддерживаемые: {supported}"
+            raise DocumentValidationError(
+                f"Неподдерживаемый формат файла. Поддерживаемые: {supported}"
+            )
         
         # Check file size
         if file_size > self.max_file_size:
             max_size_mb = self.max_file_size // (1024 * 1024)
-            return False, f"Файл слишком большой. Максимальный размер: {max_size_mb}MB"
-        
-        return True, ""
+            raise DocumentValidationError(
+                f"Файл слишком большой. Максимальный размер: {max_size_mb}MB"
+            )
     
     def extract_text_from_file(self, file_path: str) -> str:
         """
@@ -103,6 +115,9 @@ class DocumentIngestionService:
             
         Returns:
             Extracted text content
+            
+        Raises:
+            TextExtractionError: If text extraction fails
         """
         file_extension = Path(file_path).suffix.lower()
         
@@ -119,11 +134,11 @@ class DocumentIngestionService:
             elif file_extension == '.docx':
                 return self._extract_text_from_docx(content)
             else:
-                return f"Binary content ({file_extension})"
+                raise TextExtractionError(f"Unsupported file format: {file_extension}")
                 
         except Exception as e:
             logger.error(f"Ошибка при извлечении текста из {file_path}: {e}")
-            return f"Ошибка при обработке файла: {str(e)}"
+            raise TextExtractionError(f"Failed to extract text from {file_path}", str(e))
     
     def _extract_text_from_txt(self, content: bytes) -> str:
         """Extract text from TXT file"""
@@ -136,7 +151,7 @@ class DocumentIngestionService:
                     return content.decode(encoding, errors='ignore')
                 except UnicodeDecodeError:
                     continue
-            return "Cannot decode text content"
+            raise TextExtractionError("Cannot decode text content with any supported encoding")
     
     def _extract_text_from_md(self, content: bytes) -> str:
         """Extract text from Markdown file"""
@@ -145,7 +160,7 @@ class DocumentIngestionService:
     def _extract_text_from_pdf(self, content: bytes) -> str:
         """Extract text from PDF file"""
         if not PDF_AVAILABLE:
-            return "PDF processing not available (PyPDF2 not installed)"
+            raise TextExtractionError("PDF processing not available (PyPDF2 not installed)")
         
         try:
             pdf_file = io.BytesIO(content)
@@ -160,16 +175,19 @@ class DocumentIngestionService:
                 except Exception as e:
                     logger.warning(f"Ошибка при извлечении текста со страницы {page_num + 1}: {e}")
             
-            return "\n\n".join(text_content) if text_content else "No text content found"
+            if not text_content:
+                raise TextExtractionError("No text content found in PDF")
+            
+            return "\n\n".join(text_content)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке PDF: {e}")
-            return f"Ошибка при обработке PDF: {str(e)}"
+            raise TextExtractionError("Failed to process PDF", str(e))
     
     def _extract_text_from_docx(self, content: bytes) -> str:
         """Extract text from DOCX file"""
         if not DOCX_AVAILABLE:
-            return "DOCX processing not available (python-docx not installed)"
+            raise TextExtractionError("DOCX processing not available (python-docx not installed)")
         
         try:
             docx_file = io.BytesIO(content)
@@ -180,11 +198,14 @@ class DocumentIngestionService:
                 if paragraph.text.strip():
                     text_content.append(paragraph.text)
             
-            return "\n".join(text_content) if text_content else "No text content found"
+            if not text_content:
+                raise TextExtractionError("No text content found in DOCX")
+            
+            return "\n".join(text_content)
             
         except Exception as e:
             logger.error(f"Ошибка при обработке DOCX: {e}")
-            return f"Ошибка при обработке DOCX: {str(e)}"
+            raise TextExtractionError("Failed to process DOCX", str(e))
     
     def process_document(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
         """
@@ -197,7 +218,15 @@ class DocumentIngestionService:
             
         Returns:
             DocumentResponse with document information
+            
+        Raises:
+            DocumentValidationError: If file validation fails
+            TextExtractionError: If text extraction fails
+            FileStorageError: If file storage fails
         """
+        # Validate file
+        self.validate_file(filename, len(content))
+        
         document_id = str(uuid4())
         
         # Determine content type if not provided
@@ -212,15 +241,15 @@ class DocumentIngestionService:
                 f.write(content)
         except Exception as e:
             logger.error(f"Ошибка при сохранении файла {filename}: {e}")
-            raise
+            raise FileStorageError(f"Failed to save file {filename}", str(e))
         
-        # Extract text content (streaming approach for large files)
+        # Extract text content
         text_content = self.extract_text_from_file(file_path)
         
         # Create content preview
         content_preview = text_content[:200] + "..." if len(text_content) > 200 else text_content
         
-        # Create document metadata record (no large content in memory)
+        # Create document metadata record
         document_data = {
             "id": document_id,
             "filename": filename,
@@ -228,10 +257,10 @@ class DocumentIngestionService:
             "content_type": content_type,
             "status": DocumentStatus.UPLOADED,
             "content_preview": content_preview,
-            "file_path": file_path,  # Path to stored file
+            "file_path": file_path,
             "created_at": datetime.now().isoformat(),
-            "chunk_count": 0,  # Will be updated after chunking
-            "vectorized": False  # Will be updated after vectorization
+            "chunk_count": 0,
+            "vectorized": False
         }
         
         self.documents[document_id] = document_data
@@ -239,22 +268,22 @@ class DocumentIngestionService:
         
         return DocumentResponse(**{k: v for k, v in document_data.items() if k not in ['file_path']})
     
-    def get_document(self, document_id: str) -> Optional[DocumentResponse]:
+    def get_document(self, document_id: str) -> DocumentResponse:
         """Get document metadata by ID"""
         if document_id not in self.documents:
-            return None
+            raise DocumentNotFoundError(f"Document not found: {document_id}")
         
         doc_data = self.documents[document_id]
         return DocumentResponse(**{k: v for k, v in doc_data.items() if k not in ['file_path']})
     
-    def get_document_text(self, document_id: str) -> Optional[str]:
-        """Get extracted text content of document (streaming from disk)"""
+    def get_document_text(self, document_id: str) -> str:
+        """Get extracted text content of document"""
         if document_id not in self.documents:
-            return None
+            raise DocumentNotFoundError(f"Document not found: {document_id}")
         
         file_path = self.documents[document_id].get("file_path")
         if not file_path or not os.path.exists(file_path):
-            return None
+            raise FileStorageError(f"Document file not found: {file_path}")
         
         return self.extract_text_from_file(file_path)
     
@@ -268,10 +297,10 @@ class DocumentIngestionService:
             for doc in paginated_docs
         ]
     
-    def delete_document(self, document_id: str) -> bool:
+    def delete_document(self, document_id: str):
         """Delete document and its file"""
         if document_id not in self.documents:
-            return False
+            raise DocumentNotFoundError(f"Document not found: {document_id}")
         
         doc_data = self.documents[document_id]
         file_path = doc_data.get("file_path")
@@ -283,28 +312,30 @@ class DocumentIngestionService:
                 logger.info(f"Файл удален с диска: {file_path}")
             except Exception as e:
                 logger.error(f"Ошибка при удалении файла {file_path}: {e}")
+                raise FileStorageError(f"Failed to delete file {file_path}", str(e))
         
         # Remove from memory
         deleted_doc = self.documents.pop(document_id)
         logger.info(f"Документ удален: {deleted_doc['filename']} (ID: {document_id})")
-        return True
     
-    def update_document_status(self, document_id: str, status: DocumentStatus) -> bool:
+    def update_document_status(self, document_id: str, status: DocumentStatus):
         """Update document processing status"""
         if document_id not in self.documents:
-            return False
+            raise DocumentNotFoundError(f"Document not found: {document_id}")
         
         self.documents[document_id]["status"] = status
         logger.info(f"Статус документа {document_id} обновлен на {status}")
-        return True
     
-    def get_document_file_path(self, document_id: str) -> Optional[str]:
-        """Get file path for document (for external processing)"""
+    def get_document_file_path(self, document_id: str) -> str:
+        """Get file path for document"""
         if document_id not in self.documents:
-            return None
+            raise DocumentNotFoundError(f"Document not found: {document_id}")
         
         file_path = self.documents[document_id].get("file_path")
-        return file_path if file_path and os.path.exists(file_path) else None
+        if not file_path or not os.path.exists(file_path):
+            raise FileStorageError(f"Document file not found: {file_path}")
+        
+        return file_path
     
     def get_stats(self) -> Dict[str, Any]:
         """Get service statistics"""

@@ -32,54 +32,54 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "DocMind"
     app_version: str = "0.1.0"
-    debug: bool = Field(default=False, env="DEBUG")
+    debug: bool = False
     
     # Database
-    database_url: str = Field(env="DATABASE_URL")
-    database_echo: bool = Field(default=False, env="DATABASE_ECHO")
+    database_url: str = "sqlite:///./docmind.db"
+    database_echo: bool = False
     
     # Redis
-    redis_url: str = Field(default="redis://localhost:6379", env="REDIS_URL")
+    redis_url: str = "redis://localhost:6379"
     
     # Qdrant Cloud Configuration
-    qdrant_url: str = Field(env="QDRANT_URL")
-    qdrant_api_key: str = Field(env="QDRANT_API_KEY")
-    qdrant_collection_name: str = Field(default="docmind_chunks", env="QDRANT_COLLECTION_NAME")
-    qdrant_vector_size: int = Field(default=384, env="QDRANT_VECTOR_SIZE")
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""
+    qdrant_collection_name: str = "docmind_chunks"
+    qdrant_vector_size: int = 384
     
     # OpenAI
-    openai_api_key: str = Field(env="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o", env="OPENAI_MODEL")
-    openai_max_tokens: int = Field(default=4000, env="OPENAI_MAX_TOKENS")
-    openai_temperature: float = Field(default=0.7, env="OPENAI_TEMPERATURE")
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    openai_max_tokens: int = 4000
+    openai_temperature: float = 0.7
     
     # Embeddings
-    embedding_model: str = Field(default="all-MiniLM-L6-v2", env="EMBEDDING_MODEL")
-    embedding_dimension: int = Field(default=384, env="EMBEDDING_DIMENSION")
+    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_dimension: int = 384
     
     # Document Processing
-    chunk_size: int = Field(default=1000, env="CHUNK_SIZE")
-    chunk_overlap: int = Field(default=200, env="CHUNK_OVERLAP")
-    max_file_size: int = Field(default=100 * 1024 * 1024, env="MAX_FILE_SIZE")  # 100MB
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    max_file_size: int = 100 * 1024 * 1024  # 100MB
     
     # File Storage
-    upload_dir: str = Field(default="./uploads", env="UPLOAD_DIR")
-    temp_dir: str = Field(default="./temp", env="TEMP_DIR")
+    upload_dir: str = "./uploads"
+    temp_dir: str = "./temp"
     
     # Security
-    secret_key: str = Field(env="SECRET_KEY")
-    algorithm: str = Field(default="HS256", env="ALGORITHM")
-    access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    secret_key: str = "your-secret-key-here"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
     
     # Logging
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    log_format: str = Field(default="json", env="LOG_FORMAT")
+    log_level: str = "INFO"
+    log_format: str = "json"
     
     # CORS
-    allowed_origins: list[str] = Field(default=["http://localhost:3000"], env="ALLOWED_ORIGINS")
+    allowed_origins: list[str] = ["http://localhost:3000"]
     
     # Rate Limiting
-    rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE")
+    rate_limit_per_minute: int = 60
     
     class Config:
         env_file = ".env"

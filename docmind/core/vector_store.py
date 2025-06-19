@@ -4,11 +4,12 @@ Vector storage functionality using Qdrant
 import logging
 from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 import numpy as np
 
 from docmind.config.settings import settings
 from docmind.core.text_processing.embedding import get_embeddings
+from docmind.core.exceptions import VectorStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +20,19 @@ class VectorStore:
     """
     
     def __init__(self):
-        self.client = QdrantClient(
-            url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key
-        )
-        self.collection_name = settings.qdrant_collection_name
-        self.vector_size = settings.qdrant_vector_size
-        
-        # Ensure collection exists
-        self._ensure_collection()
+        try:
+            self.client = QdrantClient(
+                url=settings.qdrant_url,
+                api_key=settings.qdrant_api_key
+            )
+            self.collection_name = settings.qdrant_collection_name
+            self.vector_size = settings.qdrant_vector_size
+            
+            # Ensure collection exists
+            self._ensure_collection()
+        except Exception as e:
+            logger.error(f"Failed to initialize Qdrant client: {e}")
+            raise VectorStoreError("Failed to initialize vector store", str(e))
     
     def _ensure_collection(self):
         """Ensure Qdrant collection exists"""
@@ -49,7 +54,7 @@ class VectorStore:
                 
         except Exception as e:
             logger.error(f"Ошибка при инициализации Qdrant: {e}")
-            raise
+            raise VectorStoreError("Failed to ensure collection exists", str(e))
     
     def add_chunks(self, chunks: List[Dict[str, Any]]) -> bool:
         """
@@ -97,7 +102,7 @@ class VectorStore:
             
         except Exception as e:
             logger.error(f"Ошибка при добавлении чанков в векторное хранилище: {e}")
-            return False
+            raise VectorStoreError("Failed to add chunks to vector store", str(e))
     
     def search(self, query: str, limit: int = 10, score_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
@@ -126,20 +131,21 @@ class VectorStore:
             # Format results
             results = []
             for hit in search_result:
-                results.append({
-                    "id": hit.id,
-                    "score": hit.score,
-                    "text": hit.payload["text"],
-                    "document_id": hit.payload["document_id"],
-                    "metadata": {k: v for k, v in hit.payload.items() 
-                               if k not in ["text", "document_id"]}
-                })
+                if hit.payload:  # Check if payload exists
+                    results.append({
+                        "id": hit.id,
+                        "score": hit.score,
+                        "text": hit.payload.get("text", ""),
+                        "document_id": hit.payload.get("document_id", ""),
+                        "metadata": {k: v for k, v in hit.payload.items() 
+                                   if k not in ["text", "document_id"]}
+                    })
             
             return results
             
         except Exception as e:
             logger.error(f"Ошибка при поиске в векторном хранилище: {e}")
-            return []
+            raise VectorStoreError("Failed to search vector store", str(e))
     
     def delete_document_chunks(self, document_id: str) -> bool:
         """
@@ -155,7 +161,14 @@ class VectorStore:
             # Delete points by document_id filter
             self.client.delete(
                 collection_name=self.collection_name,
-                points_selector={"filter": {"must": [{"key": "document_id", "match": {"value": document_id}}]}}
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id",
+                            match=MatchValue(value=document_id)
+                        )
+                    ]
+                )
             )
             
             logger.info(f"Удалены чанки для документа: {document_id}")
@@ -163,7 +176,7 @@ class VectorStore:
             
         except Exception as e:
             logger.error(f"Ошибка при удалении чанков документа {document_id}: {e}")
-            return False
+            raise VectorStoreError(f"Failed to delete chunks for document {document_id}", str(e))
     
     def get_stats(self) -> Dict[str, Any]:
         """Get vector store statistics"""
@@ -178,7 +191,7 @@ class VectorStore:
             }
         except Exception as e:
             logger.error(f"Ошибка при получении статистики векторного хранилища: {e}")
-            return {}
+            raise VectorStoreError("Failed to get vector store statistics", str(e))
 
 
 # Global vector store instance

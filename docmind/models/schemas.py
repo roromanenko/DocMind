@@ -2,7 +2,7 @@
 Simple Pydantic schemas for DocMind application
 """
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 from enum import Enum
 
 
@@ -30,6 +30,8 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus
     content_preview: Optional[str] = None
     created_at: Optional[str] = None
+    chunk_count: Optional[int] = 0
+    vectorized: Optional[bool] = False
 
 
 class DocumentList(BaseModel):
@@ -53,4 +55,17 @@ class ErrorResponse(BaseModel):
     """Schema for error response"""
     error: str
     detail: str
-    status_code: int 
+    status_code: int
+
+
+class HealthResponse(BaseModel):
+    """Schema for health check response"""
+    status: str
+    message: str
+    statistics: Optional[Dict[str, Any]] = None
+
+
+class TextResponse(BaseModel):
+    """Schema for text content response"""
+    document_id: str
+    text_content: str 
