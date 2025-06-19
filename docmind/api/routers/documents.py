@@ -1,14 +1,15 @@
 """
 Documents API router
 """
+import uuid
 from fastapi import APIRouter, UploadFile, File, Depends
 from typing import List
 import logging
 
+from docmind.models.database import DocumentStatusEnum
 from docmind.models.schemas import (
     DocumentResponse, 
-    UploadResponse, 
-    DocumentStatus
+    UploadResponse
 )
 from docmind.core.text_processing.ingestion import DocumentIngestionService
 from docmind.api.dependencies import get_document_service
@@ -58,7 +59,7 @@ async def get_documents(
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
-    document_id: str,
+    document_id: uuid.UUID,
     service: DocumentIngestionService = Depends(get_document_service)
 ):
     """Get specific document by ID"""
@@ -68,7 +69,7 @@ async def get_document(
 
 @router.get("/{document_id}/text")
 async def get_document_text(
-    document_id: str,
+    document_id: uuid.UUID,
     service: DocumentIngestionService = Depends(get_document_service)
 ):
     """Get extracted text content of document"""
@@ -78,7 +79,7 @@ async def get_document_text(
 
 @router.delete("/{document_id}")
 async def delete_document(
-    document_id: str,
+    document_id: uuid.UUID,
     service: DocumentIngestionService = Depends(get_document_service)
 ):
     """Delete document"""
@@ -88,8 +89,8 @@ async def delete_document(
 
 @router.put("/{document_id}/status")
 async def update_document_status(
-    document_id: str, 
-    status: DocumentStatus,
+    document_id: uuid.UUID, 
+    status: DocumentStatusEnum,
     service: DocumentIngestionService = Depends(get_document_service)
 ):
     """Update document processing status"""

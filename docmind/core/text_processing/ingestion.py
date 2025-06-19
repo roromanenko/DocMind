@@ -5,9 +5,9 @@ Handles file upload, validation, text extraction, and document management
 import logging
 import os
 import shutil
+import uuid
 from typing import Dict, Any, Optional, List, Tuple, Union
-from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 import io
 import mimetypes
 from pathlib import Path
@@ -26,7 +26,8 @@ except ImportError:
     DOCX_AVAILABLE = False
 
 from sqlalchemy.orm import Session
-from docmind.models.schemas import DocumentStatus, DocumentResponse
+from docmind.models.database import DocumentStatusEnum, DocumentModel
+from docmind.models.schemas import DocumentResponse
 from docmind.config.settings import settings
 from docmind.core.exceptions import (
     DocumentValidationError, 
@@ -74,7 +75,7 @@ class DocumentIngestionService:
             logger.error(f"Failed to create storage directories: {e}")
             raise FileStorageError("Failed to create storage directories", str(e))
     
-    def _get_file_path(self, document_id: str, filename: str) -> str:
+    def _get_file_path(self, document_id: uuid.UUID, filename: str) -> str:
         """Generate file path for storage"""
         file_extension = Path(filename).suffix.lower()
         return os.path.join(settings.upload_dir, f"{document_id}{file_extension}")
@@ -231,7 +232,7 @@ class DocumentIngestionService:
         # Validate file
         self.validate_file(filename, len(content))
         
-        document_id = str(uuid4())
+        document_id = uuid.uuid4()
         
         # Determine content type if not provided
         if not content_type:
@@ -259,10 +260,10 @@ class DocumentIngestionService:
             "filename": filename,
             "file_size": len(content),
             "content_type": content_type,
-            "status": DocumentStatus.UPLOADED.value,
+            "status": DocumentStatusEnum.UPLOADED,
             "content_preview": content_preview,
             "file_path": file_path,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "chunk_count": 0,
             "vectorized": False
         }
@@ -271,24 +272,24 @@ class DocumentIngestionService:
         try:
             db_document = self.repository.create_document(document_data)
             logger.info(f"Документ обработан: {filename} (ID: {document_id}, размер: {len(content)} байт)")
-            return DocumentResponse(**db_document.to_dict())
+            return DocumentResponse(**DocumentModel.from_orm(db_document).dict())
         except Exception as e:
             logger.error(f"Ошибка при сохранении документа в БД: {e}")
             raise
     
-    def get_document(self, document_id: str) -> DocumentResponse:
+    def get_document(self, document_id: uuid.UUID) -> DocumentResponse:
         """Get document metadata by ID"""
         try:
             document = self.repository.get_document_by_id(document_id)
             if not document:
                 raise DocumentNotFoundError(f"Document not found: {document_id}")
             
-            return DocumentResponse(**document.to_dict())
+            return DocumentResponse(**DocumentModel.from_orm(document).dict())
         except Exception as e:
             logger.error(f"Ошибка при получении документа {document_id}: {e}")
             raise
     
-    def get_document_text(self, document_id: str) -> str:
+    def get_document_text(self, document_id: uuid.UUID) -> str:
         """Get extracted text content of document"""
         try:
             document = self.repository.get_document_by_id(document_id)
@@ -308,12 +309,12 @@ class DocumentIngestionService:
         """Get list of documents with pagination"""
         try:
             documents = self.repository.get_documents(skip=skip, limit=limit)
-            return [DocumentResponse(**doc.to_dict()) for doc in documents]
+            return [DocumentResponse(**DocumentModel.from_orm(doc).dict()) for doc in documents]
         except Exception as e:
             logger.error(f"Ошибка при получении списка документов: {e}")
             raise
     
-    def delete_document(self, document_id: str):
+    def delete_document(self, document_id: uuid.UUID):
         """Delete document and its file"""
         try:
             document = self.repository.get_document_by_id(document_id)
@@ -338,7 +339,7 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при удалении документа {document_id}: {e}")
             raise
     
-    def update_document_status(self, document_id: str, status: DocumentStatus):
+    def update_document_status(self, document_id: uuid.UUID, status: DocumentStatusEnum):
         """Update document processing status"""
         try:
             success = self.repository.update_document_status(document_id, status)
@@ -350,7 +351,7 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при обновлении статуса документа {document_id}: {e}")
             raise
     
-    def get_document_file_path(self, document_id: str) -> str:
+    def get_document_file_path(self, document_id: uuid.UUID) -> str:
         """Get file path for document"""
         try:
             document = self.repository.get_document_by_id(document_id)

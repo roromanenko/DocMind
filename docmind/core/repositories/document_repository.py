@@ -2,12 +2,13 @@
 Document repository for database operations
 """
 import logging
+import uuid
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from docmind.models.database import Document, get_db
-from docmind.models.schemas import DocumentStatus, DocumentResponse
+from docmind.models.database import Document, DocumentStatusEnum, get_db
+from docmind.models.schemas import DocumentResponse
 from docmind.core.exceptions import DocumentNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ class DocumentRepository:
             logger.error(f"Failed to create document in database: {e}")
             raise
     
-    def get_document_by_id(self, document_id: str) -> Optional[Document]:
+    def get_document_by_id(self, document_id: uuid.UUID) -> Optional[Document]:
         """Get document by ID"""
         return self.db.query(Document).filter(Document.id == document_id).first()
     
@@ -45,14 +46,14 @@ class DocumentRepository:
         """Get total number of documents"""
         return self.db.query(Document).count()
     
-    def update_document_status(self, document_id: str, status: DocumentStatus) -> bool:
+    def update_document_status(self, document_id: uuid.UUID, status: DocumentStatusEnum) -> bool:
         """Update document status"""
         try:
             document = self.get_document_by_id(document_id)
             if not document:
                 return False
             
-            setattr(document, 'status', status.value)
+            setattr(document, 'status', status)
             self.db.commit()
             logger.info(f"Document status updated: {document_id} -> {status}")
             return True
@@ -61,7 +62,7 @@ class DocumentRepository:
             logger.error(f"Failed to update document status: {e}")
             return False
     
-    def update_document_chunk_count(self, document_id: str, chunk_count: int) -> bool:
+    def update_document_chunk_count(self, document_id: uuid.UUID, chunk_count: int) -> bool:
         """Update document chunk count"""
         try:
             document = self.get_document_by_id(document_id)
@@ -76,7 +77,7 @@ class DocumentRepository:
             logger.error(f"Failed to update document chunk count: {e}")
             return False
     
-    def update_document_vectorized(self, document_id: str, vectorized: bool) -> bool:
+    def update_document_vectorized(self, document_id: uuid.UUID, vectorized: bool) -> bool:
         """Update document vectorized status"""
         try:
             document = self.get_document_by_id(document_id)
@@ -91,7 +92,7 @@ class DocumentRepository:
             logger.error(f"Failed to update document vectorized status: {e}")
             return False
     
-    def delete_document(self, document_id: str) -> bool:
+    def delete_document(self, document_id: uuid.UUID) -> bool:
         """Delete document from database"""
         try:
             document = self.get_document_by_id(document_id)
@@ -107,9 +108,9 @@ class DocumentRepository:
             logger.error(f"Failed to delete document from database: {e}")
             return False
     
-    def get_documents_by_status(self, status: DocumentStatus) -> List[Document]:
+    def get_documents_by_status(self, status: DocumentStatusEnum) -> List[Document]:
         """Get documents by status"""
-        return self.db.query(Document).filter(Document.status == status.value).all()
+        return self.db.query(Document).filter(Document.status == status).all()
     
     def get_documents_by_format(self, file_extension: str) -> List[Document]:
         """Get documents by file format"""
@@ -121,8 +122,8 @@ class DocumentRepository:
         
         # Status distribution
         status_counts = {}
-        for status in DocumentStatus:
-            count = self.db.query(Document).filter(Document.status == status.value).count()
+        for status in DocumentStatusEnum:
+            count = self.db.query(Document).filter(Document.status == status).count()
             status_counts[status.value] = count
         
         # Format distribution and total size

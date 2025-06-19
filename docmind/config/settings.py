@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     log_format: str = "json"
     
     # CORS
-    allowed_origins: list[str] = ["http://localhost:3000"]
+    allowed_origins: list[str] = ["*"]  # Allow all origins for development
     
     # Rate Limiting
     rate_limit_per_minute: int = 60

@@ -1,17 +1,12 @@
 """
 Simple Pydantic schemas for DocMind application
 """
+import uuid
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from enum import Enum
+from datetime import datetime
 
-
-class DocumentStatus(str, Enum):
-    """Document processing status"""
-    UPLOADED = "uploaded"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    ERROR = "error"
+from docmind.models.database import DocumentStatusEnum
 
 
 class DocumentCreate(BaseModel):
@@ -23,13 +18,14 @@ class DocumentCreate(BaseModel):
 
 class DocumentResponse(BaseModel):
     """Schema for document response"""
-    id: str
+    id: uuid.UUID
     filename: str
     file_size: int
     content_type: str
-    status: DocumentStatus
+    status: DocumentStatusEnum
     content_preview: Optional[str] = None
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     chunk_count: Optional[int] = 0
     vectorized: Optional[bool] = False
 
@@ -45,10 +41,10 @@ class DocumentList(BaseModel):
 class UploadResponse(BaseModel):
     """Schema for upload response"""
     message: str
-    document_id: str
+    document_id: uuid.UUID
     filename: str
     file_size: int
-    status: DocumentStatus
+    status: DocumentStatusEnum
 
 
 class ErrorResponse(BaseModel):
@@ -67,5 +63,5 @@ class HealthResponse(BaseModel):
 
 class TextResponse(BaseModel):
     """Schema for text content response"""
-    document_id: str
+    document_id: uuid.UUID
     text_content: str
