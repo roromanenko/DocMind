@@ -10,4 +10,4 @@ __all__ = [
     'chunker', 
     'get_embeddings',
     'get_embedding'
-] 
+]

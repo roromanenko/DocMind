@@ -55,14 +55,15 @@ class TextChunker:
                     document_id,
                     chunk_start,
                     len(current_chunk),
-                    metadata
+                    metadata,
                 )
                 chunks.append(chunk_data)
-                
+
                 # Start new chunk with overlap
                 overlap_text = self._get_overlap_text(current_chunk)
+                original_length = len(current_chunk)
+                chunk_start += original_length - len(overlap_text)
                 current_chunk = overlap_text + sentence
-                chunk_start = max(0, chunk_start + len(current_chunk) - len(overlap_text) - len(sentence))
             else:
                 current_chunk += sentence
         

@@ -44,5 +44,5 @@ def setup_middleware(app):
         # Log response
         process_time = time.time() - start_time
         logger.info(f"Response: {response.status_code} - {process_time:.3f}s")
-        
-        return response 
+
+        return response
