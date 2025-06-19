@@ -68,4 +68,4 @@ class HealthResponse(BaseModel):
 class TextResponse(BaseModel):
     """Schema for text content response"""
     document_id: str
-    text_content: str 
+    text_content: str

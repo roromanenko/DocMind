@@ -40,4 +40,4 @@ class VectorStoreError(DocMindBusinessException):
 
 class ChunkingError(DocMindBusinessException):
     """Raised when text chunking fails (business rule violation)"""
-    pass 
+    pass

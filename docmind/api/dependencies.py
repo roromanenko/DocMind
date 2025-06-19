@@ -25,4 +25,4 @@ async def get_current_user(token: Annotated[str, Depends(security)]):
 
 async def get_document_service():
     """Dependency to get document ingestion service"""
-    return ingestion_service 
+    return ingestion_service
