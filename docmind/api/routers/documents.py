@@ -3,7 +3,7 @@ Documents API router
 """
 import uuid
 from fastapi import APIRouter, UploadFile, File, Depends
-from typing import List
+from typing import List, Dict, Any
 import logging
 
 from docmind.models.database import DocumentStatusEnum
@@ -44,6 +44,36 @@ async def upload_document(
         file_size=document.file_size,
         status=document.status
     )
+
+
+@router.post("/upload-with-chunks", response_model=Dict[str, Any])
+async def upload_document_with_chunks(
+    file: UploadFile = File(...),
+    service: DocumentIngestionService = Depends(get_document_service)
+):
+    """Upload a document and return chunks information"""
+    if not file.filename:
+        raise_bad_request("Имя файла не может быть пустым")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Process document using service
+    document = service.process_document(
+        filename=file.filename or "",
+        content=content,
+        content_type=file.content_type
+    )
+    
+    # Get chunks for the document
+    chunks = service.get_document_chunks(document.id)
+    
+    return {
+        "message": "Документ успешно загружен с чанками",
+        "document": document,
+        "chunks_count": len(chunks),
+        "chunks": chunks
+    }
 
 
 @router.get("/", response_model=List[DocumentResponse])
@@ -109,4 +139,18 @@ async def documents_health(
         "status": "healthy",
         "message": "Document service is running",
         "statistics": stats
+    }
+
+
+@router.get("/{document_id}/chunks")
+async def get_document_chunks(
+    document_id: uuid.UUID,
+    service: DocumentIngestionService = Depends(get_document_service)
+):
+    """Get chunks for a specific document"""
+    chunks = service.get_document_chunks(document_id)
+    return {
+        "document_id": document_id,
+        "chunks_count": len(chunks),
+        "chunks": chunks
     }

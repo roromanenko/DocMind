@@ -2,6 +2,7 @@
 Text chunking functionality for document processing
 """
 import logging
+import uuid
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import re
@@ -21,13 +22,13 @@ class TextChunker:
         self.chunk_size = chunk_size or settings.chunk_size
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
         
-    def split_text(self, text: str, document_id: str, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def split_text(self, text: str, document_id: uuid.UUID, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Split text into chunks with metadata
         
         Args:
             text: Text content to split
-            document_id: ID of the source document
+            document_id: UUID of the source document
             metadata: Additional metadata to include in chunks
             
         Returns:
@@ -45,6 +46,7 @@ class TextChunker:
         chunks = []
         current_chunk = ""
         chunk_start = 0
+        chunk_index = 0
         
         for i, sentence in enumerate(sentences):
             # Check if adding this sentence would exceed chunk size
@@ -55,9 +57,11 @@ class TextChunker:
                     document_id,
                     chunk_start,
                     len(current_chunk),
+                    chunk_index,
                     metadata,
                 )
                 chunks.append(chunk_data)
+                chunk_index += 1
 
                 # Start new chunk with overlap
                 overlap_text = self._get_overlap_text(current_chunk)
@@ -74,6 +78,7 @@ class TextChunker:
                 document_id,
                 chunk_start,
                 len(current_chunk),
+                chunk_index,
                 metadata
             )
             chunks.append(chunk_data)
@@ -109,18 +114,17 @@ class TextChunker:
         
         return overlap_text
     
-    def _create_chunk_data(self, text: str, document_id: str, start_pos: int, 
-                          length: int, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _create_chunk_data(self, text: str, document_id: uuid.UUID, start_pos: int, 
+                          length: int, chunk_index: int, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create chunk data structure"""
-        chunk_id = f"{document_id}_{start_pos}_{start_pos + length}"
-        
         chunk_data = {
-            "id": chunk_id,
-            "document_id": document_id,
+            "id": str(uuid.uuid4()),  # Generate unique ID for each chunk
+            "document_id": str(document_id),
             "text": text,
             "start_position": start_pos,
             "end_position": start_pos + length,
             "length": len(text),
+            "chunk_index": chunk_index,
             "metadata": metadata or {}
         }
         

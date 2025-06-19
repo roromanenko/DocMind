@@ -36,6 +36,7 @@ from docmind.core.exceptions import (
     FileStorageError
 )
 from docmind.core.repositories.document_repository import DocumentRepository
+from docmind.core.text_processing.chunking import TextChunker
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,9 @@ class DocumentIngestionService:
             '.md': 'text/markdown'
         }
         
-        # Initialize repository
+        # Initialize repository and chunker
         self.repository = DocumentRepository(db)
+        self.chunker = TextChunker()
         
         # Ensure storage directories exist
         self._ensure_storage_dirs()
@@ -251,6 +253,13 @@ class DocumentIngestionService:
         # Extract text content
         text_content = self.extract_text_from_file(file_path)
         
+        # Generate chunks
+        chunks = self.chunker.split_text(text_content, document_id, {
+            "filename": filename,
+            "content_type": content_type,
+            "file_size": len(content)
+        })
+        
         # Create content preview
         content_preview = text_content[:200] + "..." if len(text_content) > 200 else text_content
         
@@ -264,14 +273,14 @@ class DocumentIngestionService:
             "content_preview": content_preview,
             "file_path": file_path,
             "created_at": datetime.now(timezone.utc),
-            "chunk_count": 0,
+            "chunk_count": len(chunks),
             "vectorized": False
         }
         
         # Save to database
         try:
             db_document = self.repository.create_document(document_data)
-            logger.info(f"Документ обработан: {filename} (ID: {document_id}, размер: {len(content)} байт)")
+            logger.info(f"Документ обработан: {filename} (ID: {document_id}, размер: {len(content)} байт, чанков: {len(chunks)})")
             return DocumentResponse(**DocumentModel.from_orm(db_document).dict())
         except Exception as e:
             logger.error(f"Ошибка при сохранении документа в БД: {e}")
@@ -379,4 +388,35 @@ class DocumentIngestionService:
             return stats
         except Exception as e:
             logger.error(f"Ошибка при получении статистики: {e}")
+            raise
+
+    def get_document_chunks(self, document_id: uuid.UUID) -> List[Dict[str, Any]]:
+        """
+        Get chunks for a specific document
+        
+        Args:
+            document_id: UUID of the document
+            
+        Returns:
+            List of chunk dictionaries
+            
+        Raises:
+            DocumentNotFoundError: If document not found
+        """
+        try:
+            document = self.repository.get_document_by_id(document_id)
+            if not document:
+                raise DocumentNotFoundError(f"Document not found: {document_id}")
+            
+            # Extract text and generate chunks on the fly
+            text_content = self.get_document_text(document_id)
+            chunks = self.chunker.split_text(text_content, document_id, {
+                "filename": document.filename,
+                "content_type": document.content_type,
+                "file_size": document.file_size
+            })
+            
+            return chunks
+        except Exception as e:
+            logger.error(f"Ошибка при получении чанков документа {document_id}: {e}")
             raise
