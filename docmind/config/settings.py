@@ -3,7 +3,6 @@ Application settings configuration.
 """
 import os
 from typing import Optional
-from pydantic import Field
 from pydantic_settings import BaseSettings
 
 # Load .env file explicitly
@@ -16,14 +15,6 @@ except ImportError:
 except Exception as e:
     print(f"⚠️ Error loading .env file: {e}")
 
-# Set Qdrant Cloud values directly if not in environment
-# if not os.getenv("QDRANT_URL"):
-#     os.environ["QDRANT_URL"] = "https://d5b99c4d-824a-4438-8fdb-32c398a6ccba.eu-central-1-0.aws.cloud.qdrant.io"
-#     print("✅ QDRANT_URL set from fallback")
-
-# if not os.getenv("QDRANT_API_KEY"):
-#     os.environ["QDRANT_API_KEY"] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.O52OojDBVrPeKqwIrIEwh_l2accpyhaoD_zgBIZBgOc"
-#     print("✅ QDRANT_API_KEY set from fallback")
 
 
 class Settings(BaseSettings):
@@ -35,7 +26,7 @@ class Settings(BaseSettings):
     debug: bool = False
     
     # Database
-    database_url: str = "sqlite:///./docmind.db"
+    database_url: str = "postgresql://postgres:password@localhost:5432/docmind"
     database_echo: bool = False
     
     # Redis

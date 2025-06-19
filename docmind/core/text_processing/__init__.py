@@ -1,13 +1,13 @@
 """
 Text processing module for DocMind
 """
-from .ingestion import ingestion_service
+from .ingestion import DocumentIngestionService
 from .chunking import chunker
 from .embedding import get_embeddings, get_embedding
 
 __all__ = [
-    'ingestion_service',
+    'DocumentIngestionService',
     'chunker', 
     'get_embeddings',
     'get_embedding'
-]
+] 

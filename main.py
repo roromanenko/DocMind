@@ -10,6 +10,7 @@ from docmind.api.routers import documents
 from docmind.api.exceptions import APIExceptionHandler
 from docmind.api.middleware import setup_middleware
 from docmind.core.exceptions import DocMindBusinessException
+from docmind.models.database import create_tables
 
 # Configure logging
 logging.basicConfig(
@@ -18,6 +19,13 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Initialize database
+try:
+    create_tables()
+    logger.info("✅ Database tables initialized")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize database: {e}")
 
 # Create FastAPI app
 app = FastAPI(
@@ -76,12 +84,14 @@ async def api_status():
             "Document processing",
             "Text extraction",
             "File storage",
-            "Document management"
+            "Document management",
+            "PostgreSQL database"
         ],
         "services": {
             "fastapi": "running",
             "document_ingestion": "running",
-            "file_storage": "configured"
+            "file_storage": "configured",
+            "database": "initialized"
         }
     }
 

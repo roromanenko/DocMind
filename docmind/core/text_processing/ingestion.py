@@ -25,6 +25,7 @@ try:
 except ImportError:
     DOCX_AVAILABLE = False
 
+from sqlalchemy.orm import Session
 from docmind.models.schemas import DocumentStatus, DocumentResponse
 from docmind.config.settings import settings
 from docmind.core.exceptions import (
@@ -33,6 +34,7 @@ from docmind.core.exceptions import (
     TextExtractionError,
     FileStorageError
 )
+from docmind.core.repositories.document_repository import DocumentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +45,8 @@ class DocumentIngestionService:
     Handles file validation, text extraction, and document storage
     """
     
-    def __init__(self):
-        # In-memory storage for metadata only
-        self.documents: Dict[str, Dict[str, Any]] = {}
+    def __init__(self, db: Session):
+        self.db = db
         self.supported_extensions = {'.pdf', '.docx', '.txt', '.md'}
         self.max_file_size = settings.max_file_size
         
@@ -56,6 +57,9 @@ class DocumentIngestionService:
             '.txt': 'text/plain',
             '.md': 'text/markdown'
         }
+        
+        # Initialize repository
+        self.repository = DocumentRepository(db)
         
         # Ensure storage directories exist
         self._ensure_storage_dirs()
@@ -255,118 +259,123 @@ class DocumentIngestionService:
             "filename": filename,
             "file_size": len(content),
             "content_type": content_type,
-            "status": DocumentStatus.UPLOADED,
+            "status": DocumentStatus.UPLOADED.value,
             "content_preview": content_preview,
             "file_path": file_path,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.utcnow(),
             "chunk_count": 0,
             "vectorized": False
         }
         
-        self.documents[document_id] = document_data
-        logger.info(f"Документ обработан: {filename} (ID: {document_id}, размер: {len(content)} байт)")
-        
-        return DocumentResponse(**{k: v for k, v in document_data.items() if k not in ['file_path']})
+        # Save to database
+        try:
+            db_document = self.repository.create_document(document_data)
+            logger.info(f"Документ обработан: {filename} (ID: {document_id}, размер: {len(content)} байт)")
+            return DocumentResponse(**db_document.to_dict())
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении документа в БД: {e}")
+            raise
     
     def get_document(self, document_id: str) -> DocumentResponse:
         """Get document metadata by ID"""
-        if document_id not in self.documents:
-            raise DocumentNotFoundError(f"Document not found: {document_id}")
-        
-        doc_data = self.documents[document_id]
-        return DocumentResponse(**{k: v for k, v in doc_data.items() if k not in ['file_path']})
+        try:
+            document = self.repository.get_document_by_id(document_id)
+            if not document:
+                raise DocumentNotFoundError(f"Document not found: {document_id}")
+            
+            return DocumentResponse(**document.to_dict())
+        except Exception as e:
+            logger.error(f"Ошибка при получении документа {document_id}: {e}")
+            raise
     
     def get_document_text(self, document_id: str) -> str:
         """Get extracted text content of document"""
-        if document_id not in self.documents:
-            raise DocumentNotFoundError(f"Document not found: {document_id}")
-        
-        file_path = self.documents[document_id].get("file_path")
-        if not file_path or not os.path.exists(file_path):
-            raise FileStorageError(f"Document file not found: {file_path}")
-        
-        return self.extract_text_from_file(file_path)
+        try:
+            document = self.repository.get_document_by_id(document_id)
+            if not document:
+                raise DocumentNotFoundError(f"Document not found: {document_id}")
+            
+            file_path = str(document.file_path)
+            if not file_path or not os.path.exists(file_path):
+                raise FileStorageError(f"Document file not found: {file_path}")
+            
+            return self.extract_text_from_file(file_path)
+        except Exception as e:
+            logger.error(f"Ошибка при получении текста документа {document_id}: {e}")
+            raise
     
     def get_documents(self, skip: int = 0, limit: int = 20) -> List[DocumentResponse]:
         """Get list of documents with pagination"""
-        all_docs = list(self.documents.values())
-        paginated_docs = all_docs[skip:skip + limit]
-        
-        return [
-            DocumentResponse(**{k: v for k, v in doc.items() if k not in ['file_path']})
-            for doc in paginated_docs
-        ]
+        try:
+            documents = self.repository.get_documents(skip=skip, limit=limit)
+            return [DocumentResponse(**doc.to_dict()) for doc in documents]
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка документов: {e}")
+            raise
     
     def delete_document(self, document_id: str):
         """Delete document and its file"""
-        if document_id not in self.documents:
-            raise DocumentNotFoundError(f"Document not found: {document_id}")
-        
-        doc_data = self.documents[document_id]
-        file_path = doc_data.get("file_path")
-        
-        # Delete file from disk
-        if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                logger.info(f"Файл удален с диска: {file_path}")
-            except Exception as e:
-                logger.error(f"Ошибка при удалении файла {file_path}: {e}")
-                raise FileStorageError(f"Failed to delete file {file_path}", str(e))
-        
-        # Remove from memory
-        deleted_doc = self.documents.pop(document_id)
-        logger.info(f"Документ удален: {deleted_doc['filename']} (ID: {document_id})")
+        try:
+            document = self.repository.get_document_by_id(document_id)
+            if not document:
+                raise DocumentNotFoundError(f"Document not found: {document_id}")
+            
+            file_path = str(document.file_path)
+            
+            # Delete file from disk
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Файл удален с диска: {file_path}")
+                except Exception as e:
+                    logger.error(f"Ошибка при удалении файла {file_path}: {e}")
+                    raise FileStorageError(f"Failed to delete file {file_path}", str(e))
+            
+            # Delete from database
+            self.repository.delete_document(document_id)
+            logger.info(f"Документ удален: {document.filename} (ID: {document_id})")
+        except Exception as e:
+            logger.error(f"Ошибка при удалении документа {document_id}: {e}")
+            raise
     
     def update_document_status(self, document_id: str, status: DocumentStatus):
         """Update document processing status"""
-        if document_id not in self.documents:
-            raise DocumentNotFoundError(f"Document not found: {document_id}")
-        
-        self.documents[document_id]["status"] = status
-        logger.info(f"Статус документа {document_id} обновлен на {status}")
+        try:
+            success = self.repository.update_document_status(document_id, status)
+            if not success:
+                raise DocumentNotFoundError(f"Document not found: {document_id}")
+            
+            logger.info(f"Статус документа {document_id} обновлен на {status}")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении статуса документа {document_id}: {e}")
+            raise
     
     def get_document_file_path(self, document_id: str) -> str:
         """Get file path for document"""
-        if document_id not in self.documents:
-            raise DocumentNotFoundError(f"Document not found: {document_id}")
-        
-        file_path = self.documents[document_id].get("file_path")
-        if not file_path or not os.path.exists(file_path):
-            raise FileStorageError(f"Document file not found: {file_path}")
-        
-        return file_path
+        try:
+            document = self.repository.get_document_by_id(document_id)
+            if not document:
+                raise DocumentNotFoundError(f"Document not found: {document_id}")
+            
+            file_path = str(document.file_path)
+            if not file_path or not os.path.exists(file_path):
+                raise FileStorageError(f"Document file not found: {file_path}")
+            
+            return file_path
+        except Exception as e:
+            logger.error(f"Ошибка при получении пути файла документа {document_id}: {e}")
+            raise
     
     def get_stats(self) -> Dict[str, Any]:
         """Get service statistics"""
-        total_docs = len(self.documents)
-        status_counts = {}
-        format_counts = {}
-        total_size = 0
-        
-        for doc in self.documents.values():
-            # Status distribution
-            status = doc["status"]
-            status_counts[status] = status_counts.get(status, 0) + 1
-            
-            # Format distribution
-            file_extension = Path(doc["filename"]).suffix.lower()
-            format_counts[file_extension] = format_counts.get(file_extension, 0) + 1
-            
-            # Total size
-            total_size += doc["file_size"]
-        
-        return {
-            "total_documents": total_docs,
-            "status_distribution": status_counts,
-            "format_distribution": format_counts,
-            "total_size_bytes": total_size,
-            "total_size_mb": round(total_size / (1024 * 1024), 2),
-            "supported_formats": list(self.supported_extensions),
-            "max_file_size_mb": self.max_file_size // (1024 * 1024),
-            "storage_path": settings.upload_dir
-        }
-
-
-# Singleton instance
-ingestion_service = DocumentIngestionService()
+        try:
+            stats = self.repository.get_stats()
+            stats.update({
+                "supported_formats": list(self.supported_extensions),
+                "max_file_size_mb": self.max_file_size // (1024 * 1024),
+                "storage_path": settings.upload_dir
+            })
+            return stats
+        except Exception as e:
+            logger.error(f"Ошибка при получении статистики: {e}")
+            raise

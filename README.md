@@ -306,4 +306,211 @@ docker-compose up -d
 
 - **Issues:** [GitHub Issues](https://github.com/your-repo/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/your-repo/discussions)
-- **Documentation:** [Wiki](https://github.com/your-repo/wiki) 
+- **Documentation:** [Wiki](https://github.com/your-repo/wiki)
+
+# DocMind
+
+Интеллектуальная система обработки документов с использованием RAG (Retrieval-Augmented Generation) и векторного поиска.
+
+## 🚀 Возможности
+
+- **Загрузка документов**: Поддержка PDF, DOCX, TXT, MD
+- **Извлечение текста**: Автоматическое извлечение текста из различных форматов
+- **Векторное хранилище**: Интеграция с Qdrant Cloud для семантического поиска
+- **База данных**: PostgreSQL для хранения метаданных документов
+- **REST API**: FastAPI для взаимодействия с системой
+
+## 🏗️ Архитектура
+
+```
+docmind/
+├── api/                    # API слой
+│   ├── dependencies.py     # Зависимости API
+│   ├── exceptions.py       # Обработка ошибок
+│   ├── middleware.py       # Middleware
+│   └── routers/           # API роутеры
+├── core/                   # Бизнес-логика
+│   ├── exceptions.py       # Бизнес-исключения
+│   ├── repositories/       # Репозитории БД
+│   ├── text_processing/    # Обработка текста
+│   └── vector_store.py     # Векторное хранилище
+├── models/                 # Модели данных
+│   ├── database.py         # SQLAlchemy модели
+│   └── schemas.py          # Pydantic схемы
+├── config/                 # Конфигурация
+│   └── settings.py         # Настройки приложения
+└── scripts/               # Скрипты
+    └── init_db.py         # Инициализация БД
+```
+
+## 📋 Требования
+
+- Python 3.8+
+- PostgreSQL 12+
+- Redis (опционально)
+
+## 🛠️ Установка
+
+1. **Клонируйте репозиторий**:
+```bash
+git clone <repository-url>
+cd DocMind
+```
+
+2. **Установите зависимости**:
+```bash
+pip install -r requirements.txt
+```
+
+3. **Настройте переменные окружения**:
+```bash
+cp env.example .env
+```
+
+Отредактируйте `.env` файл:
+```env
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/docmind
+
+# Qdrant Cloud
+QDRANT_URL=https://your-cluster.qdrant.io
+QDRANT_API_KEY=your-api-key
+
+# OpenAI
+OPENAI_API_KEY=your-openai-key
+
+# Security
+SECRET_KEY=your-secret-key
+```
+
+4. **Инициализируйте базу данных**:
+```bash
+python -m docmind.scripts.init_db
+```
+
+5. **Запустите приложение**:
+```bash
+python main.py
+```
+
+## 🗄️ Настройка PostgreSQL
+
+### Локальная установка
+
+1. **Установите PostgreSQL**:
+```bash
+# Ubuntu/Debian
+sudo apt-get install postgresql postgresql-contrib
+
+# macOS
+brew install postgresql
+
+# Windows
+# Скачайте с https://www.postgresql.org/download/windows/
+```
+
+2. **Создайте базу данных**:
+```bash
+sudo -u postgres psql
+CREATE DATABASE docmind;
+CREATE USER docmind_user WITH PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE docmind TO docmind_user;
+\q
+```
+
+3. **Обновите DATABASE_URL**:
+```env
+DATABASE_URL=postgresql://docmind_user:your_password@localhost:5432/docmind
+```
+
+### Docker (альтернатива)
+
+```bash
+docker run --name postgres-docmind \
+  -e POSTGRES_DB=docmind \
+  -e POSTGRES_USER=docmind_user \
+  -e POSTGRES_PASSWORD=your_password \
+  -p 5432:5432 \
+  -d postgres:13
+```
+
+## 📚 API Endpoints
+
+### Документы
+
+- `POST /documents/upload` - Загрузка документа
+- `GET /documents/` - Список документов
+- `GET /documents/{id}` - Получить документ
+- `GET /documents/{id}/text` - Получить текст документа
+- `DELETE /documents/{id}` - Удалить документ
+- `PUT /documents/{id}/status` - Обновить статус
+
+### Статус
+
+- `GET /health` - Проверка здоровья
+- `GET /api/v1/status` - Статус API
+- `GET /api/v1/qdrant/status` - Статус Qdrant
+
+## 🔧 Разработка
+
+### Структура базы данных
+
+```sql
+CREATE TABLE documents (
+    id VARCHAR(36) PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL,
+    file_size INTEGER NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'uploaded',
+    content_preview TEXT,
+    file_path VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    chunk_count INTEGER DEFAULT 0,
+    vectorized BOOLEAN DEFAULT FALSE
+);
+```
+
+### Миграции
+
+Для изменения схемы базы данных:
+
+1. Создайте новую миграцию
+2. Обновите модель в `models/database.py`
+3. Запустите миграцию
+
+### Тестирование
+
+```bash
+# Запуск тестов
+pytest
+
+# Покрытие кода
+pytest --cov=docmind
+```
+
+## 🚀 Масштабирование
+
+### Горизонтальное масштабирование
+
+- **База данных**: Используйте PostgreSQL с репликацией
+- **Файловое хранилище**: Перейдите на S3 или MinIO
+- **Векторное хранилище**: Qdrant Cloud поддерживает кластеризацию
+- **API**: Используйте балансировщик нагрузки
+
+### Мониторинг
+
+- Логирование через структурированные логи
+- Метрики производительности
+- Алерты при ошибках
+
+## 📄 Лицензия
+
+MIT License
+
+## 🤝 Вклад в проект
+
+1. Fork репозитория
+2. Создайте feature branch
+3. Commit изменения
+4. Push в branch
+5. Создайте Pull Request 
