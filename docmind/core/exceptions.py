@@ -41,3 +41,8 @@ class VectorStoreError(DocMindBusinessException):
 class ChunkingError(DocMindBusinessException):
     """Raised when text chunking fails (business rule violation)"""
     pass
+
+
+class EmbeddingError(DocMindBusinessException):
+    """Raised when embedding generation fails (business rule violation)"""
+    pass

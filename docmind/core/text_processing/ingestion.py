@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import io
 import mimetypes
 from pathlib import Path
+import asyncio
 
 # For text extraction from different formats
 try:
@@ -33,11 +34,13 @@ from docmind.core.exceptions import (
     DocumentValidationError, 
     DocumentNotFoundError, 
     TextExtractionError,
-    FileStorageError
+    FileStorageError,
+    VectorStoreError
 )
 from docmind.core.repositories.document_repository import DocumentRepository
 from docmind.core.text_processing.chunking import TextChunker
 from docmind.core.text_processing.cleaning import TextCleaner
+from docmind.core.vector_store import async_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -216,9 +219,9 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при обработке DOCX: {e}")
             raise TextExtractionError("Failed to process DOCX", str(e))
     
-    def process_document(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
+    async def process_document_async(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
         """
-        Process and store uploaded document
+        Process and store uploaded document with automatic vectorization (async)
         
         Args:
             filename: Name of the uploaded file
@@ -232,6 +235,7 @@ class DocumentIngestionService:
             DocumentValidationError: If file validation fails
             TextExtractionError: If text extraction fails
             FileStorageError: If file storage fails
+            VectorStoreError: If vectorization fails
         """
         # Validate file
         self.validate_file(filename, len(content))
@@ -270,6 +274,21 @@ class DocumentIngestionService:
             "file_size": len(content)
         })
         
+        # Vectorize chunks if we have content (async)
+        vectorized = False
+        if chunks:
+            try:
+                # Add chunks to vector store asynchronously
+                success = await async_vector_store.add_chunks_async(chunks)
+                if success:
+                    vectorized = True
+                    logger.info(f"Document vectorized asynchronously: {filename} (ID: {document_id}, chunks: {len(chunks)})")
+                else:
+                    logger.warning(f"Vectorization failed for document: {filename}")
+            except Exception as e:
+                logger.error(f"Error vectorizing document {filename}: {e}")
+                # Don't fail the entire process, just log the error
+        
         # Create content preview from cleaned text
         content_preview = cleaned_text_content[:200] + "..." if len(cleaned_text_content) > 200 else cleaned_text_content
         
@@ -284,7 +303,7 @@ class DocumentIngestionService:
             "file_path": file_path,
             "created_at": datetime.now(timezone.utc),
             "chunk_count": len(chunks),
-            "vectorized": False
+            "vectorized": vectorized
         }
         
         # Save to database
@@ -295,12 +314,18 @@ class DocumentIngestionService:
             cleaning_stats = self.text_cleaner.get_cleaning_stats(raw_text_content, cleaned_text_content)
             logger.info(f"Документ обработан: {filename} (ID: {document_id}, "
                        f"размер: {len(content)} байт, чанков: {len(chunks)}, "
+                       f"векторизован: {vectorized}, "
                        f"очистка: {cleaning_stats['reduction_percent']}% сокращение)")
             
             return DocumentResponse(**DocumentModel.from_orm(db_document).dict())
         except Exception as e:
             logger.error(f"Ошибка при сохранении документа в БД: {e}")
             raise
+    
+    # Synchronous wrapper for backward compatibility
+    def process_document(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
+        """Synchronous wrapper for process_document_async"""
+        return asyncio.run(self.process_document_async(filename, content, content_type))
     
     def get_document(self, document_id: uuid.UUID) -> DocumentResponse:
         """Get document metadata by ID"""

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 import logging
 
 from docmind.config.settings import settings
-from docmind.api.routers import documents
+from docmind.api.routers import documents, search
 from docmind.api.exceptions import APIExceptionHandler
 from docmind.api.middleware import setup_middleware
 from docmind.core.exceptions import DocMindBusinessException
@@ -52,6 +52,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(documents.router)
+app.include_router(search.router)
 
 
 @app.get("/")

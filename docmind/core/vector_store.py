@@ -1,64 +1,98 @@
 """
-Vector storage functionality using Qdrant
+Async vector storage functionality using Qdrant
 """
 import logging
 from typing import List, Dict, Any, Optional
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-import numpy as np
 
 from docmind.config.settings import settings
-from docmind.core.text_processing.embedding import get_embeddings
+from docmind.core.text_processing.embedding import EmbeddingService
 from docmind.core.exceptions import VectorStoreError
 
 logger = logging.getLogger(__name__)
 
 
-class VectorStore:
+class AsyncVectorStore:
     """
-    Vector storage service using Qdrant
+    Async vector storage service using Qdrant
     """
     
-    def __init__(self):
+    def __init__(self, embedding_service: Optional[EmbeddingService] = None):
         try:
-            self.client = QdrantClient(
+            self.client = AsyncQdrantClient(
                 url=settings.qdrant_url,
                 api_key=settings.qdrant_api_key
             )
             self.collection_name = settings.qdrant_collection_name
             self.vector_size = settings.qdrant_vector_size
+            self.embedding_service = embedding_service or EmbeddingService()
             
             # Ensure collection exists
-            self._ensure_collection()
+            self._ensure_collection_task = None
         except Exception as e:
-            logger.error(f"Failed to initialize Qdrant client: {e}")
+            logger.error(f"Failed to initialize async Qdrant client: {e}")
             raise VectorStoreError("Failed to initialize vector store", str(e))
     
-    def _ensure_collection(self):
-        """Ensure Qdrant collection exists"""
+    async def _ensure_collection(self):
+        """Ensure Qdrant collection exists with correct dimensions"""
         try:
-            collections = self.client.get_collections()
+            collections = await self.client.get_collections()
             collection_names = [c.name for c in collections.collections]
             
-            if self.collection_name not in collection_names:
-                self.client.create_collection(
+            if self.collection_name in collection_names:
+                # Check if existing collection has correct dimensions
+                collection_info = await self.client.get_collection(self.collection_name)
+                vectors_config = collection_info.config.params.vectors
+                
+                # Normalize vectors config to handle all cases
+                if vectors_config is None:
+                    existing_size = None
+                elif isinstance(vectors_config, dict):
+                    # Named vectors case - get first vector config
+                    vparams = next(iter(vectors_config.values()))
+                    existing_size = vparams.size
+                else:
+                    # Single VectorParams case
+                    existing_size = vectors_config.size
+                
+                if existing_size != self.vector_size:
+                    logger.warning(f"Collection {self.collection_name} has wrong dimensions: "
+                                 f"expected {self.vector_size}, got {existing_size}")
+                    logger.info(f"Recreating collection with correct dimensions...")
+                    
+                    # Delete old collection
+                    await self.client.delete_collection(self.collection_name)
+                    
+                    # Create new collection with correct dimensions
+                    await self.client.create_collection(
+                        collection_name=self.collection_name,
+                        vectors_config=VectorParams(
+                            size=self.vector_size,
+                            distance=Distance.COSINE
+                        )
+                    )
+                    logger.info(f"Collection {self.collection_name} recreated with dimensions {self.vector_size}")
+                else:
+                    logger.info(f"Collection {self.collection_name} already exists with correct dimensions")
+            else:
+                # Create new collection
+                await self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
                         size=self.vector_size,
                         distance=Distance.COSINE
                     )
                 )
-                logger.info(f"Создана коллекция Qdrant: {self.collection_name}")
-            else:
-                logger.info(f"Коллекция Qdrant уже существует: {self.collection_name}")
+                logger.info(f"Created new collection {self.collection_name} with dimensions {self.vector_size}")
                 
         except Exception as e:
-            logger.error(f"Ошибка при инициализации Qdrant: {e}")
+            logger.error(f"Error ensuring collection exists: {e}")
             raise VectorStoreError("Failed to ensure collection exists", str(e))
     
-    def add_chunks(self, chunks: List[Dict[str, Any]]) -> bool:
+    async def add_chunks_async(self, chunks: List[Dict[str, Any]]) -> bool:
         """
-        Add text chunks to vector store
+        Add text chunks to vector store asynchronously
         
         Args:
             chunks: List of chunk dictionaries with text and metadata
@@ -70,16 +104,19 @@ class VectorStore:
             return True
         
         try:
-            # Generate embeddings for all chunks
+            # Ensure collection exists
+            await self._ensure_collection()
+            
+            # Generate embeddings for all chunks asynchronously
             texts = [chunk["text"] for chunk in chunks]
-            embeddings = get_embeddings(texts)
+            embeddings = await self.embedding_service.get_embeddings_async(texts)
             
             # Prepare points for Qdrant
             points = []
             for i, chunk in enumerate(chunks):
                 point = PointStruct(
                     id=chunk["id"],
-                    vector=embeddings[i].tolist(),
+                    vector=embeddings[i],  # Already List[float], no need for .tolist()
                     payload={
                         "text": chunk["text"],
                         "document_id": chunk["document_id"],
@@ -91,22 +128,22 @@ class VectorStore:
                 )
                 points.append(point)
             
-            # Insert points into Qdrant
-            self.client.upsert(
+            # Insert points into Qdrant asynchronously
+            await self.client.upsert(
                 collection_name=self.collection_name,
                 points=points
             )
             
-            logger.info(f"Добавлено {len(chunks)} чанков в векторное хранилище")
+            logger.info(f"Added {len(chunks)} chunks to vector store asynchronously")
             return True
             
         except Exception as e:
-            logger.error(f"Ошибка при добавлении чанков в векторное хранилище: {e}")
+            logger.error(f"Error adding chunks to vector store: {e}")
             raise VectorStoreError("Failed to add chunks to vector store", str(e))
     
-    def search(self, query: str, limit: int = 10, score_threshold: float = 0.7) -> List[Dict[str, Any]]:
+    async def search_async(self, query: str, limit: int = 10, score_threshold: float = 0.7) -> List[Dict[str, Any]]:
         """
-        Search for similar chunks
+        Search for similar chunks asynchronously
         
         Args:
             query: Search query
@@ -117,13 +154,13 @@ class VectorStore:
             List of search results
         """
         try:
-            # Generate embedding for query
-            query_embedding = get_embeddings([query])[0]
+            # Generate embedding for query asynchronously
+            query_embedding = await self.embedding_service.get_embedding_async(query)
             
-            # Search in Qdrant
-            search_result = self.client.search(
+            # Search in Qdrant asynchronously
+            search_result = await self.client.search(
                 collection_name=self.collection_name,
-                query_vector=query_embedding.tolist(),
+                query_vector=query_embedding,  # Already List[float], no need for .tolist()
                 limit=limit,
                 score_threshold=score_threshold
             )
@@ -144,12 +181,12 @@ class VectorStore:
             return results
             
         except Exception as e:
-            logger.error(f"Ошибка при поиске в векторном хранилище: {e}")
+            logger.error(f"Error searching vector store: {e}")
             raise VectorStoreError("Failed to search vector store", str(e))
     
-    def delete_document_chunks(self, document_id: str) -> bool:
+    async def delete_document_chunks_async(self, document_id: str) -> bool:
         """
-        Delete all chunks for a specific document
+        Delete all chunks for a specific document asynchronously
         
         Args:
             document_id: ID of the document to delete
@@ -158,8 +195,8 @@ class VectorStore:
             Success status
         """
         try:
-            # Delete points by document_id filter
-            self.client.delete(
+            # Delete points by document_id filter asynchronously
+            await self.client.delete(
                 collection_name=self.collection_name,
                 points_selector=Filter(
                     must=[
@@ -171,17 +208,17 @@ class VectorStore:
                 )
             )
             
-            logger.info(f"Удалены чанки для документа: {document_id}")
+            logger.info(f"Deleted chunks for document asynchronously: {document_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Ошибка при удалении чанков документа {document_id}: {e}")
+            logger.error(f"Error deleting chunks for document {document_id}: {e}")
             raise VectorStoreError(f"Failed to delete chunks for document {document_id}", str(e))
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get vector store statistics"""
+    async def get_stats_async(self) -> Dict[str, Any]:
+        """Get vector store statistics asynchronously"""
         try:
-            collection_info = self.client.get_collection(self.collection_name)
+            collection_info = await self.client.get_collection(self.collection_name)
             return {
                 "collection_name": self.collection_name,
                 "vector_size": self.vector_size,
@@ -190,9 +227,33 @@ class VectorStore:
                 "status": collection_info.status
             }
         except Exception as e:
-            logger.error(f"Ошибка при получении статистики векторного хранилища: {e}")
+            logger.error(f"Error getting vector store statistics: {e}")
             raise VectorStoreError("Failed to get vector store statistics", str(e))
 
+    # Synchronous wrappers for backward compatibility
+    def add_chunks(self, chunks: List[Dict[str, Any]]) -> bool:
+        """Synchronous wrapper for add_chunks_async"""
+        import asyncio
+        return asyncio.run(self.add_chunks_async(chunks))
+    
+    def search(self, query: str, limit: int = 10, score_threshold: float = 0.7) -> List[Dict[str, Any]]:
+        """Synchronous wrapper for search_async"""
+        import asyncio
+        return asyncio.run(self.search_async(query, limit, score_threshold))
+    
+    def delete_document_chunks(self, document_id: str) -> bool:
+        """Synchronous wrapper for delete_document_chunks_async"""
+        import asyncio
+        return asyncio.run(self.delete_document_chunks_async(document_id))
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Synchronous wrapper for get_stats_async"""
+        import asyncio
+        return asyncio.run(self.get_stats_async())
 
-# Global vector store instance
-vector_store = VectorStore()
+
+# Global async vector store instance
+async_vector_store = AsyncVectorStore()
+
+# Backward compatibility alias
+vector_store = async_vector_store
