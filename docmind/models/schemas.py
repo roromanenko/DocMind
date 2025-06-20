@@ -3,17 +3,10 @@ Simple Pydantic schemas for DocMind application
 """
 import uuid
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from docmind.models.database import DocumentStatusEnum
-
-
-class DocumentCreate(BaseModel):
-    """Schema for document creation"""
-    filename: str
-    content_type: str
-    file_size: int
 
 
 class DocumentResponse(BaseModel):
@@ -28,14 +21,6 @@ class DocumentResponse(BaseModel):
     updated_at: Optional[datetime] = None
     chunk_count: Optional[int] = 0
     vectorized: Optional[bool] = False
-
-
-class DocumentList(BaseModel):
-    """Schema for document list response"""
-    documents: list[DocumentResponse]
-    total: int
-    page: int
-    per_page: int
 
 
 class UploadResponse(BaseModel):
@@ -65,3 +50,27 @@ class TextResponse(BaseModel):
     """Schema for text content response"""
     document_id: uuid.UUID
     text_content: str
+
+
+class SearchQuery(BaseModel):
+    """Schema for search query"""
+    query: str
+    limit: Optional[int] = 10
+    score_threshold: Optional[float] = 0.7
+
+
+class SearchResult(BaseModel):
+    """Schema for individual search result"""
+    id: str
+    score: float
+    text: str
+    document_id: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class SearchResponse(BaseModel):
+    """Schema for search response"""
+    query: str
+    results: List[SearchResult]
+    total_results: int
+    search_stats: Optional[Dict[str, Any]] = None

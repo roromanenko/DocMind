@@ -2,11 +2,13 @@
 DocMind FastAPI application entry point
 """
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 import logging
+from fastapi.staticfiles import StaticFiles
+import os
 
 from docmind.config.settings import settings
-from docmind.api.routers import documents, search
+from docmind.api.routers import documents, search, rag
 from docmind.api.exceptions import APIExceptionHandler
 from docmind.api.middleware import setup_middleware
 from docmind.core.exceptions import DocMindBusinessException
@@ -34,6 +36,10 @@ app = FastAPI(
     debug=settings.debug
 )
 
+# Подключаем папку static
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+
 # Setup middleware
 setup_middleware(app)
 
@@ -51,18 +57,17 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
-app.include_router(documents.router)
-app.include_router(search.router)
+app.include_router(documents.router, prefix="/api/v1")
+app.include_router(search.router, prefix="/api/v1")
+app.include_router(rag.router, prefix="/api/v1")
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    """Root endpoint"""
-    return {
-        "message": f"Welcome to {settings.app_name}",
-        "version": settings.app_version,
-        "status": "running"
-    }
+    """Root endpoint: web chat UI"""
+    index_path = os.path.join("static", "chat.html")
+    with open(index_path, encoding="utf-8") as f:
+        return f.read()
 
 
 @app.get("/health")
@@ -80,7 +85,7 @@ async def api_status():
     """API status endpoint."""
     return {
         "status": "running",
-        "version": "0.1.0",
+        "version": settings.app_version,
         "features": [
             "Document processing",
             "Text extraction",
@@ -95,46 +100,6 @@ async def api_status():
             "database": "initialized"
         }
     }
-
-
-@app.get("/api/v1/qdrant/status")
-async def qdrant_status():
-    """Qdrant Cloud status endpoint."""
-    try:
-        from docmind.core.vector_store import vector_store
-        stats = vector_store.get_stats()
-        
-        return {
-            "status": "connected",
-            "cloud": True,
-            "collection": stats
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Qdrant Cloud service not available",
-            "cloud": True
-        }
-
-
-@app.get("/api/v1/qdrant/cluster")
-async def qdrant_cluster_info():
-    """Get detailed Qdrant Cloud cluster information."""
-    try:
-        from docmind.core.vector_store import vector_store
-        stats = vector_store.get_stats()
-        
-        return {
-            "status": "connected",
-            "cluster_info": stats
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Cannot connect to Qdrant Cloud cluster"
-        }
 
 
 if __name__ == "__main__":

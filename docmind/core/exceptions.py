@@ -32,6 +32,9 @@ class FileStorageError(DocMindBusinessException):
     """Raised when file storage operations fail (business rule violation)"""
     pass
 
+class RAGError(DocMindBusinessException):
+    """Raised when RAG operations fail (business rule violation)"""
+    pass
 
 class VectorStoreError(DocMindBusinessException):
     """Raised when vector store operations fail (business rule violation)"""

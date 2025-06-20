@@ -4,12 +4,10 @@ Handles file upload, validation, text extraction, and document management
 """
 import logging
 import os
-import shutil
 import uuid
-from typing import Dict, Any, Optional, List, Tuple, Union
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import io
-import mimetypes
 from pathlib import Path
 import asyncio
 
@@ -40,7 +38,7 @@ from docmind.core.exceptions import (
 from docmind.core.repositories.document_repository import DocumentRepository
 from docmind.core.text_processing.chunking import TextChunker
 from docmind.core.text_processing.cleaning import TextCleaner
-from docmind.core.vector_store import async_vector_store
+from docmind.core.vector_store.qdrant_store import async_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -219,24 +217,8 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при обработке DOCX: {e}")
             raise TextExtractionError("Failed to process DOCX", str(e))
     
-    async def process_document_async(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
-        """
-        Process and store uploaded document with automatic vectorization (async)
-        
-        Args:
-            filename: Name of the uploaded file
-            content: File content as bytes
-            content_type: MIME type of the file (optional)
-            
-        Returns:
-            DocumentResponse with document information
-            
-        Raises:
-            DocumentValidationError: If file validation fails
-            TextExtractionError: If text extraction fails
-            FileStorageError: If file storage fails
-            VectorStoreError: If vectorization fails
-        """
+    def process_document(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
+        """Process and store uploaded document with automatic vectorization"""
         # Validate file
         self.validate_file(filename, len(content))
         
@@ -256,7 +238,7 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при сохранении файла {filename}: {e}")
             raise FileStorageError(f"Failed to save file {filename}", str(e))
         
-        # Extract raw text content (no cleaning at this stage)
+        # Extract raw text content
         raw_text_content = self.extract_text_from_file(file_path)
         
         # Clean text content
@@ -264,7 +246,6 @@ class DocumentIngestionService:
         
         if not cleaned_text_content.strip():
             logger.warning(f"No content after cleaning for file {filename}")
-            # Still create document but with empty content
             cleaned_text_content = ""
         
         # Generate chunks from cleaned text
@@ -274,20 +255,18 @@ class DocumentIngestionService:
             "file_size": len(content)
         })
         
-        # Vectorize chunks if we have content (async)
+        # Vectorize chunks if we have content
         vectorized = False
         if chunks:
             try:
-                # Add chunks to vector store asynchronously
-                success = await async_vector_store.add_chunks_async(chunks)
+                success = asyncio.run(async_vector_store.add_chunks_async(chunks))
                 if success:
                     vectorized = True
-                    logger.info(f"Document vectorized asynchronously: {filename} (ID: {document_id}, chunks: {len(chunks)})")
+                    logger.info(f"Document vectorized: {filename} (ID: {document_id}, chunks: {len(chunks)})")
                 else:
                     logger.warning(f"Vectorization failed for document: {filename}")
             except Exception as e:
                 logger.error(f"Error vectorizing document {filename}: {e}")
-                # Don't fail the entire process, just log the error
         
         # Create content preview from cleaned text
         content_preview = cleaned_text_content[:200] + "..." if len(cleaned_text_content) > 200 else cleaned_text_content
@@ -321,11 +300,6 @@ class DocumentIngestionService:
         except Exception as e:
             logger.error(f"Ошибка при сохранении документа в БД: {e}")
             raise
-    
-    # Synchronous wrapper for backward compatibility
-    def process_document(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
-        """Synchronous wrapper for process_document_async"""
-        return asyncio.run(self.process_document_async(filename, content, content_type))
     
     def get_document(self, document_id: uuid.UUID) -> DocumentResponse:
         """Get document metadata by ID"""
@@ -397,9 +371,17 @@ class DocumentIngestionService:
                     logger.error(f"Ошибка при удалении файла {file_path}: {e}")
                     raise FileStorageError(f"Failed to delete file {file_path}", str(e))
             
+            # Delete chunks from vector store
+            try:
+                asyncio.run(async_vector_store.delete_document_chunks_async(str(document_id)))
+                logger.info(f"Chunks deleted from vector store for document: {document_id}")
+            except Exception as e:
+                logger.error(f"Error deleting chunks from vector store: {e}")
+            
             # Delete from database
             self.repository.delete_document(document_id)
-            logger.info(f"Документ удален: {document.filename} (ID: {document_id})")
+            logger.info(f"Документ удален из БД: {document_id}")
+            
         except Exception as e:
             logger.error(f"Ошибка при удалении документа {document_id}: {e}")
             raise
@@ -407,11 +389,8 @@ class DocumentIngestionService:
     def update_document_status(self, document_id: uuid.UUID, status: DocumentStatusEnum):
         """Update document processing status"""
         try:
-            success = self.repository.update_document_status(document_id, status)
-            if not success:
-                raise DocumentNotFoundError(f"Document not found: {document_id}")
-            
-            logger.info(f"Статус документа {document_id} обновлен на {status}")
+            self.repository.update_document_status(document_id, status)
+            logger.info(f"Статус документа обновлен: {document_id} -> {status}")
         except Exception as e:
             logger.error(f"Ошибка при обновлении статуса документа {document_id}: {e}")
             raise
@@ -429,7 +408,7 @@ class DocumentIngestionService:
             
             return file_path
         except Exception as e:
-            logger.error(f"Ошибка при получении пути файла документа {document_id}: {e}")
+            logger.error(f"Ошибка при получении пути к файлу документа {document_id}: {e}")
             raise
     
     def get_stats(self) -> Dict[str, Any]:
@@ -438,41 +417,19 @@ class DocumentIngestionService:
             stats = self.repository.get_stats()
             stats.update({
                 "supported_formats": list(self.supported_extensions),
-                "max_file_size_mb": self.max_file_size // (1024 * 1024),
-                "storage_path": settings.upload_dir
+                "max_file_size_mb": self.max_file_size / (1024 * 1024)
             })
             return stats
         except Exception as e:
             logger.error(f"Ошибка при получении статистики: {e}")
-            raise
-
+            return {"error": str(e)}
+    
     def get_document_chunks(self, document_id: uuid.UUID) -> List[Dict[str, Any]]:
-        """
-        Get chunks for a specific document
-        
-        Args:
-            document_id: UUID of the document
-            
-        Returns:
-            List of chunk dictionaries
-            
-        Raises:
-            DocumentNotFoundError: If document not found
-        """
+        """Get chunks for a specific document"""
         try:
-            document = self.repository.get_document_by_id(document_id)
-            if not document:
-                raise DocumentNotFoundError(f"Document not found: {document_id}")
-            
-            # Extract text and generate chunks on the fly
-            text_content = self.get_document_text(document_id)
-            chunks = self.chunker.split_text(text_content, document_id, {
-                "filename": document.filename,
-                "content_type": document.content_type,
-                "file_size": document.file_size
-            })
-            
-            return chunks
+            # This would typically query the vector store for chunks
+            # For now, return empty list as chunks are stored in vector store
+            return []
         except Exception as e:
             logger.error(f"Ошибка при получении чанков документа {document_id}: {e}")
-            raise
+            return []

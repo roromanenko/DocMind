@@ -7,7 +7,7 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 
 from docmind.config.settings import settings
-from docmind.core.text_processing.embedding import EmbeddingService
+from docmind.core.services.embedding_service import EmbeddingService
 from docmind.core.exceptions import VectorStoreError
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ class AsyncVectorStore:
             for i, chunk in enumerate(chunks):
                 point = PointStruct(
                     id=chunk["id"],
-                    vector=embeddings[i],  # Already List[float], no need for .tolist()
+                    vector=embeddings[i],
                     payload={
                         "text": chunk["text"],
                         "document_id": chunk["document_id"],
@@ -160,7 +160,7 @@ class AsyncVectorStore:
             # Search in Qdrant asynchronously
             search_result = await self.client.search(
                 collection_name=self.collection_name,
-                query_vector=query_embedding,  # Already List[float], no need for .tolist()
+                query_vector=query_embedding,
                 limit=limit,
                 score_threshold=score_threshold
             )
@@ -168,7 +168,7 @@ class AsyncVectorStore:
             # Format results
             results = []
             for hit in search_result:
-                if hit.payload:  # Check if payload exists
+                if hit.payload:
                     results.append({
                         "id": hit.id,
                         "score": hit.score,
@@ -208,52 +208,31 @@ class AsyncVectorStore:
                 )
             )
             
-            logger.info(f"Deleted chunks for document asynchronously: {document_id}")
+            logger.info(f"Deleted chunks for document {document_id} from vector store")
             return True
             
         except Exception as e:
-            logger.error(f"Error deleting chunks for document {document_id}: {e}")
-            raise VectorStoreError(f"Failed to delete chunks for document {document_id}", str(e))
+            logger.error(f"Error deleting document chunks from vector store: {e}")
+            raise VectorStoreError("Failed to delete document chunks", str(e))
     
     async def get_stats_async(self) -> Dict[str, Any]:
         """Get vector store statistics asynchronously"""
         try:
             collection_info = await self.client.get_collection(self.collection_name)
             return {
+                "status": "connected",
                 "collection_name": self.collection_name,
                 "vector_size": self.vector_size,
                 "points_count": collection_info.points_count,
-                "segments_count": collection_info.segments_count,
-                "status": collection_info.status
+                "segments_count": collection_info.segments_count
             }
         except Exception as e:
-            logger.error(f"Error getting vector store statistics: {e}")
-            raise VectorStoreError("Failed to get vector store statistics", str(e))
-
-    # Synchronous wrappers for backward compatibility
-    def add_chunks(self, chunks: List[Dict[str, Any]]) -> bool:
-        """Synchronous wrapper for add_chunks_async"""
-        import asyncio
-        return asyncio.run(self.add_chunks_async(chunks))
-    
-    def search(self, query: str, limit: int = 10, score_threshold: float = 0.7) -> List[Dict[str, Any]]:
-        """Synchronous wrapper for search_async"""
-        import asyncio
-        return asyncio.run(self.search_async(query, limit, score_threshold))
-    
-    def delete_document_chunks(self, document_id: str) -> bool:
-        """Synchronous wrapper for delete_document_chunks_async"""
-        import asyncio
-        return asyncio.run(self.delete_document_chunks_async(document_id))
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Synchronous wrapper for get_stats_async"""
-        import asyncio
-        return asyncio.run(self.get_stats_async())
+            logger.error(f"Error getting vector store stats: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
 
-# Global async vector store instance
+# Global instance
 async_vector_store = AsyncVectorStore()
-
-# Backward compatibility alias
-vector_store = async_vector_store

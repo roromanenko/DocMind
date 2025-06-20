@@ -1,0 +1,217 @@
+@import url('https://fonts.googleapis.com/css2?family=Bigelow+Rules&family=Inter:wght@200;400&display=swap');
+
+body {
+    background-color: #000000;
+    margin: 0;
+    color: #F2F2F2; /* Установим белый цвет текста по умолчанию для контраста */
+    font-family: sans-serif; /* Установим базовый шрифт */
+}
+
+#app-container {
+    display: flex;
+    height: 100vh;
+}
+
+#chat-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#header {
+    background-color: #000000;
+    padding: 0 20px;
+    border-bottom: 1px solid #1a1a1a;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Расталкиваем элементы по краям */
+    flex-shrink: 0; /* Шапка не должна сжиматься */
+}
+
+#header h1 {
+    margin: 0;
+    font-size: 48px; /* Немного увеличим для такого шрифта */
+    color: #F2F2F2;
+    font-family: 'Bigelow Rules', cursive;
+    font-weight: normal; /* Убедимся, что браузер не пытается его сделать жирнее */
+    -webkit-text-stroke: 0.2px #000; /* Маленький трюк, чтобы сделать шрифт визуально тоньше */
+}
+
+#profile-icon {
+    cursor: pointer;
+    color: #F2F2F2;
+}
+
+#chat-box {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto; /* Добавим прокрутку для сообщений */
+}
+
+#input-container {
+    padding: 20px 320px 40px 320px;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.message-input-area {
+    display: flex;
+    flex-direction: column; /* Вертикальное расположение: сначала текст, потом кнопки */
+    width: 100%;
+    background-color: #191F1E;
+    padding: 20px; /* Увеличиваем внутренние отступы */
+    border-radius: 12px; /* Добавляем сглаженные углы */
+    box-sizing: border-box;
+}
+
+#user-input {
+    flex-grow: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #F2F2F2;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400; /* Обычный для читаемости */
+    font-size: 16px;
+    resize: none;
+    padding: 10px;
+    box-sizing: border-box;
+    min-height: 44px; /* Начальная высота */
+    max-height: 150px; /* Максимальная высота до появления скролла */
+    overflow-y: auto; /* Показываем скроллбар при переполнении */
+}
+
+#user-input::placeholder {
+    font-family: 'Inter', sans-serif;
+    font-weight: 200; /* Extra Light */
+    font-size: 20px;
+    color: rgba(242, 242, 242, 0.4);
+    opacity: 1; /* Для кроссбраузерности */
+}
+
+.input-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 5px;
+}
+
+.controls-left,
+.controls-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.control-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Удаляем старые, более специфичные стили */
+.attach-btn,
+#send-btn {
+    margin: 0;
+}
+
+/* Custom Scrollbar Styling */
+#user-input::-webkit-scrollbar,
+#chat-box::-webkit-scrollbar {
+    width: 8px;
+}
+
+#user-input::-webkit-scrollbar-track,
+#chat-box::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#user-input::-webkit-scrollbar-thumb,
+#chat-box::-webkit-scrollbar-thumb {
+    background-color: #4a4a4a;
+    border-radius: 10px;
+    border: 2px solid #191F1E; /* Обводка в цвет фона поля ввода */
+}
+
+#user-input::-webkit-scrollbar-thumb:hover,
+#chat-box::-webkit-scrollbar-thumb:hover {
+    background-color: #6a6a6a;
+}
+
+#history-panel {
+    width: 320px;
+    background-color: #010806;
+    padding: 20px;
+    box-sizing: border-box;
+    border-right: 1px solid #1a1a1a; /* Небольшая граница для разделения */
+    color: #F2F2F2;
+    display: flex;
+    flex-direction: column;
+}
+
+#history-panel h2 {
+    margin-top: 20px; /* Отступ от линии сверху */
+    text-align: left; /* Выравнивание по левому краю */
+    padding-left: 15px; /* Отступ для выравнивания с кнопками */
+    font-family: 'Inter', sans-serif;
+    font-weight: 200; /* Extra Light */
+    font-size: 16px;
+    color: rgba(242, 242, 242, 0.4); /* #F2F2F2 с 40% прозрачностью */
+    letter-spacing: 1.5px; /* Немного увеличим расстояние между буквами */
+}
+
+.panel-options {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 20px; /* Отступ до линии снизу */
+    border-bottom: 1px solid #1a1a1a; /* Новая линия */
+}
+
+.panel-button {
+    display: flex;
+    align-items: center;
+    background-color: transparent;
+    border: none;
+    color: #F2F2F2;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400; /* Regular */
+    font-size: 16px;
+    transition: background-color 0.2s;
+}
+
+.panel-button:not(:last-child) {
+    margin-bottom: 0px; /* Точный отступ между кнопками */
+}
+
+.panel-button:hover {
+    background-color: #1a1a1a;
+}
+
+.panel-button svg {
+    margin-right: 15px;
+    stroke: #8A8A8A; /* Цвет иконок */
+}
+
+body::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('/assets/BGPattern.svg'); /* Путь к вашему паттерну */
+    background-repeat: repeat;
+    opacity: 0.22; /* Здесь можно регулировать прозрачность паттерна от 0.0 до 1.0 */
+    z-index: -1; /* Размещаем паттерн под контентом */
+} 

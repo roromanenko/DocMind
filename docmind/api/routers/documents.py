@@ -11,9 +11,8 @@ from docmind.models.schemas import (
     DocumentResponse, 
     UploadResponse
 )
-from docmind.core.text_processing.ingestion import DocumentIngestionService
-from docmind.api.dependencies import get_document_service
-from docmind.api.exceptions import raise_bad_request
+from docmind.api.controllers.document_controller import DocumentController
+from docmind.api.dependencies import get_document_controller
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -22,140 +21,72 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Upload a document"""
-    if not file.filename:
-        raise_bad_request("Имя файла не может быть пустым")
-    
-    # Read file content
-    content = await file.read()
-    
-    # Process document using service
-    document = service.process_document(
-        filename=file.filename or "",
-        content=content,
-        content_type=file.content_type
-    )
-    return UploadResponse(
-        message="Документ успешно загружен",
-        document_id=document.id,
-        filename=document.filename,
-        file_size=document.file_size,
-        status=document.status
-    )
-
-
-@router.post("/upload-with-chunks", response_model=Dict[str, Any])
-async def upload_document_with_chunks(
-    file: UploadFile = File(...),
-    service: DocumentIngestionService = Depends(get_document_service)
-):
-    """Upload a document and return chunks information"""
-    if not file.filename:
-        raise_bad_request("Имя файла не может быть пустым")
-    
-    # Read file content
-    content = await file.read()
-    
-    # Process document using service
-    document = service.process_document(
-        filename=file.filename or "",
-        content=content,
-        content_type=file.content_type
-    )
-    
-    # Get chunks for the document
-    chunks = service.get_document_chunks(document.id)
-    
-    return {
-        "message": "Документ успешно загружен с чанками",
-        "document": document,
-        "chunks_count": len(chunks),
-        "chunks": chunks
-    }
+    return await controller.upload_document(file)
 
 
 @router.get("/", response_model=List[DocumentResponse])
 async def get_documents(
     skip: int = 0, 
     limit: int = 20,
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Get list of documents with pagination"""
-    documents = service.get_documents(skip=skip, limit=limit)
-    return documents
+    return controller.get_documents(skip=skip, limit=limit)
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: uuid.UUID,
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Get specific document by ID"""
-    document = service.get_document(document_id)
-    return document
+    return controller.get_document(document_id)
 
 
 @router.get("/{document_id}/text")
 async def get_document_text(
     document_id: uuid.UUID,
     cleaned: bool = Query(True, description="Whether to return cleaned text"),
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Get extracted text content of document"""
-    text_content = service.get_document_text(document_id, cleaned=cleaned)
-    return {
-        "document_id": document_id, 
-        "text_content": text_content,
-        "cleaned": cleaned
-    }
+    return controller.get_document_text(document_id, cleaned=cleaned)
 
 
 @router.get("/{document_id}/chunks")
 async def get_document_chunks(
     document_id: uuid.UUID,
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Get chunks for a specific document"""
-    chunks = service.get_document_chunks(document_id)
-    return {
-        "document_id": document_id,
-        "chunks_count": len(chunks),
-        "chunks": chunks
-    }
+    return controller.get_document_chunks(document_id)
 
 
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: uuid.UUID,
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Delete document"""
-    service.delete_document(document_id)
-    return {"message": "Документ успешно удален"}
+    return controller.delete_document(document_id)
 
 
 @router.put("/{document_id}/status")
 async def update_document_status(
     document_id: uuid.UUID, 
     status: DocumentStatusEnum,
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Update document processing status"""
-    service.update_document_status(document_id, status)
-    return {"message": "Статус документа обновлен"}
+    return controller.update_document_status(document_id, status)
 
 
-@router.get("/status/health")
+@router.get("/health/status")
 async def documents_health(
-    service: DocumentIngestionService = Depends(get_document_service)
+    controller: DocumentController = Depends(get_document_controller)
 ):
     """Health check and service statistics"""
-    stats = service.get_stats()
-    
-    return {
-        "status": "healthy",
-        "message": "Document service is running",
-        "statistics": stats
-    }
+    return controller.get_health_status()

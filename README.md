@@ -1,91 +1,120 @@
-# DocMind - Scalable RAG Application
+# DocMind
 
-Масштабируемое приложение на основе Retrieval-Augmented Generation (RAG) для обработки документов и интеллектуального поиска с использованием LLM.
+Scalable RAG application for document processing and AI-powered search
 
-## 🏗️ Архитектура
+## Features
 
-### Технологический стек
+- **Document Processing**: Support for PDF, DOCX, TXT, and Markdown files
+- **Text Extraction**: Automatic text extraction and cleaning
+- **Vector Search**: Semantic search using OpenAI embeddings and Qdrant
+- **RAG Pipeline**: Retrieval-Augmented Generation for question answering
+- **REST API**: FastAPI-based RESTful API
+- **PostgreSQL**: Document metadata storage
+- **Async Processing**: Non-blocking document processing
 
-**Backend:**
-- **FastAPI** - веб-фреймворк для API
-- **SQLAlchemy + Alembic** - ORM и миграции БД
-- **PostgreSQL** - основная база данных
-- **Redis + Celery** - очереди и фоновые задачи
-- **Chroma/Qdrant** - векторная база данных
+## Quick Start
 
-**AI/ML:**
-- **OpenAI GPT-4o** - LLM для генерации ответов
-- **sentence-transformers** - для создания embeddings
-- **langchain** - RAG pipeline
+### Prerequisites
 
-**Frontend:**
-- **React + TypeScript** - веб-интерфейс
-- **Electron** - десктопное приложение
+- Python 3.9+
+- PostgreSQL
+- Qdrant (local or cloud)
+- OpenAI API key
 
-### Архитектурный паттерн
+### Installation
 
-Проект использует **Clean Architecture** с элементами **CQRS**:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Presentation Layer                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   FastAPI   │  │   React     │  │   Electron  │         │
-│  │   (API)     │  │   (Web)     │  │  (Desktop)  │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   Use Cases │  │   Commands  │  │   Queries   │         │
-│  │   (Services)│  │   (CQRS)    │  │   (CQRS)    │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────┐
-│                     Domain Layer                            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │   Entities  │  │   Value     │  │   Domain    │         │
-│  │             │  │   Objects   │  │   Services  │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────┐
-│                  Infrastructure Layer                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │ PostgreSQL  │  │   Vector DB │  │   File      │         │
-│  │   (ORM)     │  │   (Chroma)  │  │   Storage   │         │
-│  └─────────────┘  └─────────────┘  └─────────────┘         │
-└─────────────────────────────────────────────────────────────┘
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd DocMind
 ```
 
-## 📁 Структура проекта
+2. Install dependencies:
+```bash
+pip install poetry
+poetry install
+```
 
+3. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
 ```
-DocMind/
-├── docmind/                    # Основной пакет
-│   ├── core/                   # Доменная логика
-│   │   ├── domain/            # Сущности и бизнес-логика
-│   │   ├── application/       # Use cases и сервисы
-│   │   └── infrastructure/    # Адаптеры для внешних систем
-│   ├── api/                   # API слой
-│   │   ├── routes/           # API маршруты
-│   │   ├── middleware/       # Промежуточное ПО
-│   │   └── dependencies/     # Зависимости API
-│   ├── services/             # Бизнес-сервисы
-│   │   ├── document_processing/  # Обработка документов
-│   │   ├── embedding/        # Работа с embeddings
-│   │   ├── rag/             # RAG pipeline
-│   │   └── vector_store/    # Векторная БД
-│   ├── utils/               # Утилиты
-│   └── config/              # Конфигурация
-├── frontend/                # Веб-интерфейс
-├── tests/                   # Тесты
-├── docs/                    # Документация
-├── scripts/                 # Скрипты развертывания
-├── docker/                  # Docker конфигурация
-├── main.py                  # Точка входа
-├── pyproject.toml          # Зависимости Poetry
-└── README.md               # Документация
+
+4. Initialize the database:
+```bash
+python -m docmind.scripts.init_db
 ```
+
+5. Run the application:
+```bash
+python main.py
+```
+
+The API will be available at `http://localhost:8000`
+
+## API Endpoints
+
+### Documents
+- `POST /api/v1/documents/upload` - Upload a document
+- `GET /api/v1/documents/` - List documents
+- `GET /api/v1/documents/{id}` - Get document details
+- `GET /api/v1/documents/{id}/text` - Get document text
+- `GET /api/v1/documents/{id}/chunks` - Get document chunks
+- `DELETE /api/v1/documents/{id}` - Delete document
+- `PUT /api/v1/documents/{id}/status` - Update document status
+
+### Search
+- `POST /api/v1/search/` - Semantic search
+- `GET /api/v1/search/stats` - Search statistics
+- `GET /api/v1/search/health` - Search health check
+
+### RAG
+- `POST /api/v1/rag/ask` - Ask questions using RAG
+- `GET /api/v1/rag/stats` - RAG statistics
+- `GET /api/v1/rag/health` - RAG health check
+
+### System
+- `GET /` - Root endpoint
+- `GET /health` - Health check
+- `GET /api/v1/status` - API status
+
+## Configuration
+
+Key configuration options in `settings.py`:
+
+- `database_url`: PostgreSQL connection string
+- `qdrant_url`: Qdrant server URL
+- `qdrant_api_key`: Qdrant API key (for cloud)
+- `openai_api_key`: OpenAI API key
+- `chunk_size`: Text chunk size for processing
+- `max_file_size`: Maximum file size limit
+
+## Architecture
+
+- **API Layer**: FastAPI routers and middleware
+- **Service Layer**: Business logic and document processing
+- **Repository Layer**: Database operations
+- **Vector Store**: Qdrant for embeddings storage
+- **Text Processing**: Chunking, cleaning, and embedding
+
+## Development
+
+### Running Tests
+```bash
+pytest
+```
+
+### Code Formatting
+```bash
+black .
+flake8 .
+mypy .
+```
+
+## License
+
+MIT License
 
 ## 🚀 Установка и запуск
 

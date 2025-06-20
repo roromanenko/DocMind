@@ -5,38 +5,26 @@ description = "Scalable RAG application for document processing and AI-powered s
 authors = [
     {name = "Your Name",email = "your.email@example.com"}
 ]
-requires-python = "^3.9"
+requires-python = "^3.11"
 dependencies = [
     "fastapi>=0.115.13,<0.116.0",
     "uvicorn[standard]>=0.34.3,<0.35.0",
     "pydantic>=2.0.0,<3.0.0",
     "sqlalchemy>=2.0.0,<3.0.0",
-    "alembic>=1.13.0,<2.0.0",
     "psycopg2-binary>=2.9.0,<3.0.0",
-    "redis>=5.0.0,<6.0.0",
-    "celery>=5.3.0,<6.0.0",
     "qdrant-client>=1.7.0,<2.0.0",
     "openai>=1.0.0,<2.0.0",
-    "langchain>=0.1.0,<1.0.0",
-    "langchain-openai>=0.1.0,<1.0.0",
-    "langchain-community>=0.1.0,<1.0.0",
-    "sentence-transformers>=2.2.0,<3.0.0",
     "python-multipart>=0.0.6,<1.0.0",
-    "python-jose[cryptography]>=3.3.0,<4.0.0",
-    "passlib[bcrypt]>=1.7.4,<2.0.0",
     "python-dotenv>=1.0.0,<2.0.0",
-    "structlog>=23.0.0,<24.0.0",
-    "tenacity>=8.2.0,<9.0.0",
     "pydantic-settings>=2.0.0,<3.0.0",
-    "httpx>=0.25.0,<1.0.0",
     "aiofiles>=23.0.0,<24.0.0",
     "pypdf>=3.17.0,<4.0.0",
     "python-docx>=1.1.0,<2.0.0",
-    "beautifulsoup4>=4.12.0,<5.0.0",
     "tiktoken>=0.5.0,<1.0.0",
     "numpy>=1.26.0,<2.0.0",
-    "pandas>=2.0.0,<3.0.0",
-    "pypdf2 (>=3.0.1,<4.0.0)"
+    "tenacity (>=9.1.2,<10.0.0)",
+    "pypdf2 (>=3.0.1,<4.0.0)",
+    "beautifulsoup4 (>=4.13.4,<5.0.0)"
 ]
 
 [tool.poetry]
@@ -51,16 +39,7 @@ pytest-cov = "^4.1.0"
 black = "^25.1.0"
 flake8 = "^7.2.0"
 mypy = "^1.8.0"
-pre-commit = "^3.6.0"
 httpx = "^0.25.0"
-factory-boy = "^3.3.0"
-
-[tool.poetry.group.test.dependencies]
-pytest = "^8.4.1"
-pytest-asyncio = "^0.23.0"
-pytest-cov = "^4.1.0"
-httpx = "^0.25.0"
-factory-boy = "^3.3.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -68,7 +47,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py311']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -85,7 +64,7 @@ extend-exclude = '''
 '''
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

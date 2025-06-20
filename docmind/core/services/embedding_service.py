@@ -33,12 +33,8 @@ class EmbeddingService:
         self._tokenizer: Optional[tiktoken.Encoding] = None
         self._model = settings.embedding_model
         self._dimension = settings.embedding_dimension
-        self._max_tokens_per_batch = settings.embedding_max_tokens_per_batch
         self._max_batch_size = settings.embedding_max_batch_size
         self._max_text_tokens = settings.embedding_max_text_tokens
-        self._batch_base_delay = settings.embedding_batch_base_delay
-        self._batch_jitter_min = settings.embedding_batch_jitter_min
-        self._batch_jitter_max = settings.embedding_batch_jitter_max
     
     def _get_async_client(self) -> AsyncOpenAI:
         """Get or create async OpenAI client with retry configuration"""
@@ -148,10 +144,9 @@ class EmbeddingService:
             text, token_count = text_tuple
             
             # Check if adding this text would exceed limits
-            would_exceed_tokens = current_tokens + token_count > self._max_tokens_per_batch
-            would_exceed_size = len(current_batch) >= self._max_batch_size
+            would_exceed_tokens = current_tokens + token_count > self._max_batch_size
             
-            if would_exceed_tokens or would_exceed_size:
+            if would_exceed_tokens:
                 # Save current batch if it has content
                 if current_batch:
                     batches.append(current_batch)
@@ -249,13 +244,7 @@ class EmbeddingService:
                     
                     # Rate limiting: adaptive delay between batches (non-blocking)
                     if batch_idx + 1 < len(batches):
-                        base_delay = self._batch_base_delay
-                        token_factor = batch_tokens / 1000
-                        delay = base_delay * (1 + token_factor)
-                        jitter = random.uniform(self._batch_jitter_min, self._batch_jitter_max)
-                        delay = delay * jitter
-                        
-                        logger.debug(f"Waiting {delay:.3f}s before next batch")
+                        delay = 1  # Assuming a default delay between batches
                         await asyncio.sleep(delay)
                 
                 total_tokens = sum(token_count for batch in batches for _, token_count in batch)
@@ -376,7 +365,7 @@ class EmbeddingService:
                 },
                 "available_models": available_models[:10],  # Show first 10 models
                 "client_initialized": self._async_client is not None,
-                "max_tokens_per_batch": self._max_tokens_per_batch,
+                "max_batch_size": self._max_batch_size,
                 "max_text_tokens": self._max_text_tokens
             }
             
