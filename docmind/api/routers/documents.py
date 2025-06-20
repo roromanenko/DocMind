@@ -2,7 +2,7 @@
 Documents API router
 """
 import uuid
-from fastapi import APIRouter, UploadFile, File, Depends
+from fastapi import APIRouter, UploadFile, File, Depends, Query
 from typing import List, Dict, Any
 import logging
 
@@ -100,11 +100,30 @@ async def get_document(
 @router.get("/{document_id}/text")
 async def get_document_text(
     document_id: uuid.UUID,
+    cleaned: bool = Query(True, description="Whether to return cleaned text"),
     service: DocumentIngestionService = Depends(get_document_service)
 ):
     """Get extracted text content of document"""
-    text_content = service.get_document_text(document_id)
-    return {"document_id": document_id, "text_content": text_content}
+    text_content = service.get_document_text(document_id, cleaned=cleaned)
+    return {
+        "document_id": document_id, 
+        "text_content": text_content,
+        "cleaned": cleaned
+    }
+
+
+@router.get("/{document_id}/chunks")
+async def get_document_chunks(
+    document_id: uuid.UUID,
+    service: DocumentIngestionService = Depends(get_document_service)
+):
+    """Get chunks for a specific document"""
+    chunks = service.get_document_chunks(document_id)
+    return {
+        "document_id": document_id,
+        "chunks_count": len(chunks),
+        "chunks": chunks
+    }
 
 
 @router.delete("/{document_id}")
@@ -139,18 +158,4 @@ async def documents_health(
         "status": "healthy",
         "message": "Document service is running",
         "statistics": stats
-    }
-
-
-@router.get("/{document_id}/chunks")
-async def get_document_chunks(
-    document_id: uuid.UUID,
-    service: DocumentIngestionService = Depends(get_document_service)
-):
-    """Get chunks for a specific document"""
-    chunks = service.get_document_chunks(document_id)
-    return {
-        "document_id": document_id,
-        "chunks_count": len(chunks),
-        "chunks": chunks
     }

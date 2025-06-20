@@ -9,6 +9,7 @@ import re
 
 from docmind.config.settings import settings
 from docmind.core.exceptions import ChunkingError
+from docmind.core.text_processing.cleaning import TextCleaner
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,13 @@ class TextChunker:
     Service for splitting text into chunks for vector storage
     """
     
-    def __init__(self, chunk_size: Optional[int] = None, chunk_overlap: Optional[int] = None):
+    def __init__(self, 
+                 chunk_size: Optional[int] = None, 
+                 chunk_overlap: Optional[int] = None,
+                 text_cleaner: Optional[TextCleaner] = None):
         self.chunk_size = chunk_size or settings.chunk_size
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
+        self.text_cleaner = text_cleaner or TextCleaner()
         
     def split_text(self, text: str, document_id: uuid.UUID, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
@@ -37,18 +42,29 @@ class TextChunker:
         if not text.strip():
             return []
         
-        # Clean and normalize text
-        text = self._clean_text(text)
+        # Clean and normalize text using the text cleaner
+        cleaned_text = self.text_cleaner.clean_text(text)
+        
+        if not cleaned_text.strip():
+            logger.warning(f"No content after cleaning for document {document_id}")
+            return []
         
         # Split into sentences first (better semantic boundaries)
-        sentences = self._split_into_sentences(text)
+        sentences = self._split_into_sentences(cleaned_text)
+        
+        # Clean individual sentences
+        cleaned_sentences = self.text_cleaner.clean_sentences(sentences)
+        
+        if not cleaned_sentences:
+            logger.warning(f"No valid sentences after cleaning for document {document_id}")
+            return []
         
         chunks = []
         current_chunk = ""
         chunk_start = 0
         chunk_index = 0
         
-        for i, sentence in enumerate(sentences):
+        for i, sentence in enumerate(cleaned_sentences):
             # Check if adding this sentence would exceed chunk size
             if len(current_chunk) + len(sentence) > self.chunk_size and current_chunk:
                 # Save current chunk
@@ -83,16 +99,12 @@ class TextChunker:
             )
             chunks.append(chunk_data)
         
-        logger.info(f"Разбито на {len(chunks)} чанков для документа {document_id}")
+        # Log cleaning statistics
+        cleaning_stats = self.text_cleaner.get_cleaning_stats(text, cleaned_text)
+        logger.info(f"Разбито на {len(chunks)} чанков для документа {document_id}. "
+                   f"Очистка: {cleaning_stats['reduction_percent']}% сокращение текста")
+        
         return chunks
-    
-    def _clean_text(self, text: str) -> str:
-        """Clean and normalize text"""
-        # Remove excessive whitespace
-        text = re.sub(r'\s+', ' ', text)
-        # Remove excessive newlines
-        text = re.sub(r'\n\s*\n', '\n\n', text)
-        return text.strip()
     
     def _split_into_sentences(self, text: str) -> List[str]:
         """Split text into sentences using regex"""
@@ -129,6 +141,7 @@ class TextChunker:
         }
         
         return chunk_data
+
 
 # Global chunker instance
 chunker = TextChunker()

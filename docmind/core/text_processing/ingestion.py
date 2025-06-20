@@ -37,6 +37,7 @@ from docmind.core.exceptions import (
 )
 from docmind.core.repositories.document_repository import DocumentRepository
 from docmind.core.text_processing.chunking import TextChunker
+from docmind.core.text_processing.cleaning import TextCleaner
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +61,10 @@ class DocumentIngestionService:
             '.md': 'text/markdown'
         }
         
-        # Initialize repository and chunker
+        # Initialize services
         self.repository = DocumentRepository(db)
-        self.chunker = TextChunker()
+        self.text_cleaner = TextCleaner()
+        self.chunker = TextChunker(text_cleaner=self.text_cleaner)
         
         # Ensure storage directories exist
         self._ensure_storage_dirs()
@@ -121,7 +123,7 @@ class DocumentIngestionService:
             file_path: Path to the file
             
         Returns:
-            Extracted text content
+            Extracted text content (raw, not cleaned)
             
         Raises:
             TextExtractionError: If text extraction fails
@@ -250,18 +252,26 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при сохранении файла {filename}: {e}")
             raise FileStorageError(f"Failed to save file {filename}", str(e))
         
-        # Extract text content
-        text_content = self.extract_text_from_file(file_path)
+        # Extract raw text content (no cleaning at this stage)
+        raw_text_content = self.extract_text_from_file(file_path)
         
-        # Generate chunks
-        chunks = self.chunker.split_text(text_content, document_id, {
+        # Clean text content
+        cleaned_text_content = self.text_cleaner.clean_text(raw_text_content)
+        
+        if not cleaned_text_content.strip():
+            logger.warning(f"No content after cleaning for file {filename}")
+            # Still create document but with empty content
+            cleaned_text_content = ""
+        
+        # Generate chunks from cleaned text
+        chunks = self.chunker.split_text(cleaned_text_content, document_id, {
             "filename": filename,
             "content_type": content_type,
             "file_size": len(content)
         })
         
-        # Create content preview
-        content_preview = text_content[:200] + "..." if len(text_content) > 200 else text_content
+        # Create content preview from cleaned text
+        content_preview = cleaned_text_content[:200] + "..." if len(cleaned_text_content) > 200 else cleaned_text_content
         
         # Create document metadata record
         document_data = {
@@ -280,7 +290,13 @@ class DocumentIngestionService:
         # Save to database
         try:
             db_document = self.repository.create_document(document_data)
-            logger.info(f"Документ обработан: {filename} (ID: {document_id}, размер: {len(content)} байт, чанков: {len(chunks)})")
+            
+            # Log processing statistics
+            cleaning_stats = self.text_cleaner.get_cleaning_stats(raw_text_content, cleaned_text_content)
+            logger.info(f"Документ обработан: {filename} (ID: {document_id}, "
+                       f"размер: {len(content)} байт, чанков: {len(chunks)}, "
+                       f"очистка: {cleaning_stats['reduction_percent']}% сокращение)")
+            
             return DocumentResponse(**DocumentModel.from_orm(db_document).dict())
         except Exception as e:
             logger.error(f"Ошибка при сохранении документа в БД: {e}")
@@ -298,8 +314,17 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при получении документа {document_id}: {e}")
             raise
     
-    def get_document_text(self, document_id: uuid.UUID) -> str:
-        """Get extracted text content of document"""
+    def get_document_text(self, document_id: uuid.UUID, cleaned: bool = True) -> str:
+        """
+        Get extracted text content of document
+        
+        Args:
+            document_id: UUID of the document
+            cleaned: Whether to return cleaned text (True) or raw text (False)
+            
+        Returns:
+            Text content of the document
+        """
         try:
             document = self.repository.get_document_by_id(document_id)
             if not document:
@@ -309,7 +334,13 @@ class DocumentIngestionService:
             if not file_path or not os.path.exists(file_path):
                 raise FileStorageError(f"Document file not found: {file_path}")
             
-            return self.extract_text_from_file(file_path)
+            raw_text = self.extract_text_from_file(file_path)
+            
+            if cleaned:
+                return self.text_cleaner.clean_text(raw_text)
+            else:
+                return raw_text
+                
         except Exception as e:
             logger.error(f"Ошибка при получении текста документа {document_id}: {e}")
             raise

@@ -45,13 +45,23 @@ class Settings(BaseSettings):
     openai_temperature: float = 0.7
     
     # Embeddings
-    embedding_model: str = "all-MiniLM-L6-v2"
-    embedding_dimension: int = 384
+    embedding_model: str = "text-embedding-ada-002"
+    embedding_dimension: int = 1536
     
     # Document Processing
     chunk_size: int = 1000
     chunk_overlap: int = 200
     max_file_size: int = 100 * 1024 * 1024  # 100MB
+    
+    # Text Cleaning Settings
+    text_cleaning_remove_html: bool = True
+    text_cleaning_normalize_whitespace: bool = True
+    text_cleaning_normalize_punctuation: bool = True
+    text_cleaning_remove_control_chars: bool = True
+    text_cleaning_unicode_normalization: bool = True
+    text_cleaning_min_sentence_length: int = 10
+    text_cleaning_min_words: int = 2
+    text_cleaning_unicode_format: str = "NFC"  # NFC, NFD, NFKC, NFKD
     
     # File Storage
     upload_dir: str = "./uploads"
