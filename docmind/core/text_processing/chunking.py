@@ -27,13 +27,14 @@ class TextChunker:
         self.chunk_overlap = chunk_overlap or settings.chunk_overlap
         self.text_cleaner = text_cleaner or TextCleaner()
         
-    def split_text(self, text: str, document_id: uuid.UUID, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def split_text(self, text: str, document_id: uuid.UUID, chat_id: Optional[uuid.UUID] = None, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Split text into chunks with metadata
         
         Args:
             text: Text content to split
             document_id: UUID of the source document
+            chat_id: UUID of the chat session
             metadata: Additional metadata to include in chunks
             
         Returns:
@@ -71,6 +72,7 @@ class TextChunker:
                 chunk_data = self._create_chunk_data(
                     current_chunk.strip(),
                     document_id,
+                    chat_id,
                     chunk_start,
                     len(current_chunk),
                     chunk_index,
@@ -92,6 +94,7 @@ class TextChunker:
             chunk_data = self._create_chunk_data(
                 current_chunk.strip(),
                 document_id,
+                chat_id,
                 chunk_start,
                 len(current_chunk),
                 chunk_index,
@@ -126,12 +129,13 @@ class TextChunker:
         
         return overlap_text
     
-    def _create_chunk_data(self, text: str, document_id: uuid.UUID, start_pos: int, 
+    def _create_chunk_data(self, text: str, document_id: uuid.UUID, chat_id: Optional[uuid.UUID], start_pos: int, 
                           length: int, chunk_index: int, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create chunk data structure"""
         chunk_data = {
             "id": str(uuid.uuid4()),  # Generate unique ID for each chunk
             "document_id": str(document_id),
+            "chat_id": str(chat_id) if chat_id else None,
             "text": text,
             "start_position": start_pos,
             "end_position": start_pos + length,

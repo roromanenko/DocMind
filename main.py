@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from docmind.config.settings import settings
-from docmind.api.routers import documents, search, rag
+from docmind.api.routers import documents, search, rag, chats
 from docmind.api.exceptions import APIExceptionHandler
 from docmind.api.middleware import setup_middleware
 from docmind.core.exceptions import DocMindBusinessException
@@ -57,6 +57,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
+app.include_router(chats.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(rag.router, prefix="/api/v1")

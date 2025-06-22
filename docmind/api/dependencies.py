@@ -9,11 +9,9 @@ from sqlalchemy.orm import Session
 from docmind.models.database import get_db
 from docmind.core.services.document_service import DocumentIngestionService
 from docmind.core.services.embedding_service import EmbeddingService
+from docmind.core.services.chat_service import ChatService
 from docmind.core.vector_store import AsyncVectorStore
 from docmind.core.services.rag_service import RAGService
-from docmind.api.controllers.rag_controller import RAGController
-from docmind.api.controllers.document_controller import DocumentController
-from docmind.api.controllers.search_controller import SearchController
 
 # Security
 security = HTTPBearer(auto_error=False)
@@ -39,6 +37,11 @@ def get_database() -> Generator[Session, None, None]:
         db.close()
 
 
+def get_chat_service(db: Session = Depends(get_database)) -> ChatService:
+    """Get chat service"""
+    return ChatService(db)
+
+
 def get_document_service(db: Session = Depends(get_database)) -> DocumentIngestionService:
     """Get document ingestion service"""
     return DocumentIngestionService(db)
@@ -60,24 +63,3 @@ def get_rag_service(
 ) -> RAGService:
     """Get RAG service with dependencies"""
     return RAGService(embedding_service=embedding_service, vector_store=vector_store)
-
-
-def get_rag_controller(
-    rag_service: RAGService = Depends(get_rag_service)
-) -> RAGController:
-    """Get RAG controller with service dependency"""
-    return RAGController(rag_service=rag_service)
-
-
-def get_document_controller(
-    document_service: DocumentIngestionService = Depends(get_document_service)
-) -> DocumentController:
-    """Get document controller with service dependency"""
-    return DocumentController(document_service=document_service)
-
-
-def get_search_controller(
-    embedding_service: EmbeddingService = Depends(get_embedding_service)
-) -> SearchController:
-    """Get search controller with service dependency"""
-    return SearchController(embedding_service=embedding_service)

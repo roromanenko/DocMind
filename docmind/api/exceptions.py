@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 import logging
+from functools import wraps
 
 from docmind.core.exceptions import (
     DocMindBusinessException,
@@ -15,10 +16,36 @@ from docmind.core.exceptions import (
     TextExtractionError,
     FileStorageError,
     VectorStoreError,
-    ChunkingError
+    ChunkingError,
+    RAGError
 )
 
 logger = logging.getLogger(__name__)
+
+
+def handle_errors(func):
+    """Decorator to handle service-layer exceptions and convert them to HTTPExceptions."""
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except DocumentNotFoundError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        except DocumentValidationError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except RAGError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+        except (TextExtractionError, ChunkingError) as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        except (FileStorageError, VectorStoreError) as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        except DocMindBusinessException as e:
+            logger.warning(f"Unhandled business exception: {type(e).__name__} - {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        except Exception as e:
+            logger.error(f"An unexpected error occurred in {func.__name__}: {e}", exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An internal server error occurred.")
+    return wrapper
 
 
 class APIExceptionHandler:

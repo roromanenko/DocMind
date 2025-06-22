@@ -2,73 +2,61 @@
 RAG (Retrieval-Augmented Generation) API router
 """
 import logging
-from fastapi import APIRouter, Depends
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
+import uuid
 
-from docmind.api.controllers.rag_controller import RAGController
-from docmind.api.dependencies import get_rag_controller
+from fastapi import APIRouter, Depends, status
+
+from docmind.api.dependencies import get_rag_service
+from docmind.core.services.rag_service import RAGService
+from docmind.api.exceptions import handle_errors
+from docmind.models.schemas import (
+    AskRequest,
+    AskResponse, 
+    RAGStatsResponse,
+    RAGHealthResponse
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/rag", tags=["rag"])
 
 
-class AskRequest(BaseModel):
-    """Ask question request model"""
-    question: str
-    top_k: Optional[int] = 5
+# --- Endpoints ---
 
-
-class Source(BaseModel):
-    """Source document model"""
-    document_id: str
-    score: float
-    text: str
-
-
-class AskResponse(BaseModel):
-    """Ask question response model"""
-    answer: str
-    context_chunks: List[str]
-    sources: List[Source]
-    confidence: float
-    chunks_used: int
-
-
-@router.post("/ask", response_model=AskResponse)
+@router.post(
+    "/{chat_id}/ask",
+    response_model=AskResponse,
+    summary="Ask a question to the RAG system within a chat context",
+    description="Receives a question, finds relevant context from documents in the specified chat, and generates an answer."
+)
+@handle_errors
 async def ask_question(
+    chat_id: uuid.UUID,
     request: AskRequest,
-    controller: RAGController = Depends(get_rag_controller)
+    service: RAGService = Depends(get_rag_service),
 ):
-    """
-    Ask a question and get RAG-based answer
-    
-    Args:
-        request: Question request with parameters
-        controller: RAG controller dependency
-        
-    Returns:
-        RAG answer with sources and metadata
-    """
-    result = await controller.ask_question(
-        question=request.question,
-        top_k=request.top_k or 5
-    )
-    
-    return AskResponse(**result)
+    return await service.ask(question=request.question, chat_id=str(chat_id), top_k=request.top_k)
 
-
-@router.get("/stats")
+@router.get(
+    "/stats",
+    response_model=RAGStatsResponse,
+    summary="Get RAG service statistics",
+    description="Provides statistics about the RAG components, including the vector store and embedding models."
+)
+@handle_errors
 async def get_rag_stats(
-    controller: RAGController = Depends(get_rag_controller)
+    service: RAGService = Depends(get_rag_service),
 ):
-    """Get RAG service statistics"""
-    return await controller.get_stats()
+    return await service.get_stats()
 
-
-@router.get("/health")
+@router.get(
+    "/health",
+    response_model=RAGHealthResponse,
+    summary="Health check for the RAG service",
+    description="Performs a real-time health check on the RAG service and its dependencies."
+)
+@handle_errors
 async def rag_health(
-    controller: RAGController = Depends(get_rag_controller)
-):
-    """Health check for RAG functionality"""
-    return await controller.health_check() 
+    service: RAGService = Depends(get_rag_service),
+) -> RAGHealthResponse:
+    health_status = await service.health_check()
+    return RAGHealthResponse(**health_status) 

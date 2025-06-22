@@ -85,6 +85,11 @@ class DocumentIngestionService:
         file_extension = Path(filename).suffix.lower()
         return os.path.join(settings.upload_dir, f"{document_id}{file_extension}")
     
+    def _get_file_path_with_chat(self, chat_id: uuid.UUID, document_id: uuid.UUID, filename: str) -> str:
+        """Generate file path for storage organized by chat"""
+        file_extension = Path(filename).suffix.lower()
+        return os.path.join(settings.upload_dir, str(chat_id), f"{document_id}{file_extension}")
+    
     def validate_file(self, filename: str, file_size: int):
         """
         Validate uploaded file for format and size
@@ -217,10 +222,93 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при обработке DOCX: {e}")
             raise TextExtractionError("Failed to process DOCX", str(e))
     
-    def process_document(self, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
-        """Process and store uploaded document with automatic vectorization"""
+    async def process_and_vectorize_document(self, document_id: uuid.UUID):
+        """
+        Asynchronous background task to process and vectorize a document.
+        
+        Args:
+            document_id: The ID of the document to process.
+        """
+        logger.info(f"Starting background processing for document {document_id}")
+        doc = None
+        try:
+            # 1. Get document and update status to PROCESSING
+            doc = self.repository.get_document_by_id(document_id)
+            if not doc:
+                raise DocumentNotFoundError(f"Document {document_id} not found for background processing.")
+                
+            self.repository.update_document_status(document_id, DocumentStatusEnum.PROCESSING)
+            
+            # 2. Extract and clean text
+            logger.info(f"Extracting text from {str(doc.file_path)} for doc {document_id}")
+            raw_text = self.extract_text_from_file(str(doc.file_path))
+            cleaned_text = self.text_cleaner.clean_text(raw_text)
+            
+            if not cleaned_text.strip():
+                logger.warning(f"No content after cleaning for doc {document_id}")
+                self.repository.update_document_status(document_id, DocumentStatusEnum.ERROR)
+                return
+
+            # Update text content in the document record (assuming a method exists)
+            # This part needs a new method in the repository
+            # setattr(doc, 'raw_text_content', raw_text)
+            # setattr(doc, 'cleaned_text_content', cleaned_text)
+            
+            # 3. Chunk the text
+            logger.info(f"Chunking text for doc {document_id}")
+            chunks = self.chunker.split_text(cleaned_text, document_id, chat_id=getattr(doc, 'chat_id', None), metadata={"filename": doc.filename})
+            self.repository.update_document_chunk_count(document_id, len(chunks))
+            logger.info(f"Created {len(chunks)} chunks for doc {document_id}")
+
+            if not chunks:
+                self.repository.update_document_status(document_id, DocumentStatusEnum.COMPLETED)
+                logger.info(f"Document {document_id} has no chunks, marking as complete.")
+                return
+
+            # 4. Initialize vector store collection if needed
+            try:
+                # Check if collection exists, if not initialize it
+                await async_vector_store.get_stats_async()
+            except:
+                logger.info("Initializing vector store collection...")
+                await async_vector_store.initialize()
+            
+            # 5. Vectorize and upsert to Qdrant
+            logger.info(f"Vectorizing chunks for doc {document_id}")
+            try:
+                await async_vector_store.add_chunks_async(chunks)
+                self.repository.update_document_vectorized(document_id, True)
+                logger.info(f"Successfully vectorized and stored chunks for doc {document_id}")
+            except VectorStoreError as e:
+                logger.error(f"Vector store error for doc {document_id}: {e}")
+                self.repository.update_document_status(document_id, DocumentStatusEnum.ERROR)
+                return
+            
+            # 6. Mark as COMPLETED
+            self.repository.update_document_status(document_id, DocumentStatusEnum.COMPLETED)
+            logger.info(f"Successfully processed document {document_id}")
+
+        except Exception as e:
+            logger.error(f"Unhandled error processing document {document_id}: {e}", exc_info=True)
+            if document_id:
+                try:
+                    self.repository.update_document_status(document_id, DocumentStatusEnum.ERROR)
+                except Exception as db_e:
+                    logger.error(f"Failed to even update status to ERROR for doc {document_id}: {db_e}")
+    
+    def create_upload_record(self, chat_id: uuid.UUID, filename: str, content: bytes, content_type: Optional[str] = None) -> DocumentResponse:
+        """
+        Validates, saves file, and creates initial document record in DB.
+        This is the first, synchronous part of the upload process.
+        """
         # Validate file
         self.validate_file(filename, len(content))
+        
+        # Verify chat exists
+        from docmind.core.repositories.chat_repository import ChatRepository
+        chat_repo = ChatRepository(self.db)
+        if not chat_repo.get_chat_by_id(chat_id):
+            raise DocumentValidationError(f"Chat session {chat_id} not found")
         
         document_id = uuid.uuid4()
         
@@ -229,77 +317,30 @@ class DocumentIngestionService:
             file_extension = Path(filename).suffix.lower()
             content_type = self.mime_types.get(file_extension, 'application/octet-stream')
         
-        # Save file to disk
-        file_path = self._get_file_path(document_id, filename)
+        # Save file to disk with chat organization
+        file_path = self._get_file_path_with_chat(chat_id, document_id, filename)
         try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, 'wb') as f:
                 f.write(content)
         except Exception as e:
             logger.error(f"Ошибка при сохранении файла {filename}: {e}")
             raise FileStorageError(f"Failed to save file {filename}", str(e))
         
-        # Extract raw text content
-        raw_text_content = self.extract_text_from_file(file_path)
-        
-        # Clean text content
-        cleaned_text_content = self.text_cleaner.clean_text(raw_text_content)
-        
-        if not cleaned_text_content.strip():
-            logger.warning(f"No content after cleaning for file {filename}")
-            cleaned_text_content = ""
-        
-        # Generate chunks from cleaned text
-        chunks = self.chunker.split_text(cleaned_text_content, document_id, {
-            "filename": filename,
-            "content_type": content_type,
-            "file_size": len(content)
-        })
-        
-        # Vectorize chunks if we have content
-        vectorized = False
-        if chunks:
-            try:
-                success = asyncio.run(async_vector_store.add_chunks_async(chunks))
-                if success:
-                    vectorized = True
-                    logger.info(f"Document vectorized: {filename} (ID: {document_id}, chunks: {len(chunks)})")
-                else:
-                    logger.warning(f"Vectorization failed for document: {filename}")
-            except Exception as e:
-                logger.error(f"Error vectorizing document {filename}: {e}")
-        
-        # Create content preview from cleaned text
-        content_preview = cleaned_text_content[:200] + "..." if len(cleaned_text_content) > 200 else cleaned_text_content
-        
-        # Create document metadata record
+        # Create document record in the database with UPLOADED status
         document_data = {
             "id": document_id,
+            "chat_id": chat_id,
             "filename": filename,
-            "file_size": len(content),
-            "content_type": content_type,
-            "status": DocumentStatusEnum.UPLOADED,
-            "content_preview": content_preview,
             "file_path": file_path,
-            "created_at": datetime.now(timezone.utc),
-            "chunk_count": len(chunks),
-            "vectorized": vectorized
+            "file_size": len(content),
+            "content_type": content_type or 'application/octet-stream',
+            "status": DocumentStatusEnum.UPLOADED
         }
+        db_document = self.repository.create_document(document_data)
         
-        # Save to database
-        try:
-            db_document = self.repository.create_document(document_data)
-            
-            # Log processing statistics
-            cleaning_stats = self.text_cleaner.get_cleaning_stats(raw_text_content, cleaned_text_content)
-            logger.info(f"Документ обработан: {filename} (ID: {document_id}, "
-                       f"размер: {len(content)} байт, чанков: {len(chunks)}, "
-                       f"векторизован: {vectorized}, "
-                       f"очистка: {cleaning_stats['reduction_percent']}% сокращение)")
-            
-            return DocumentResponse(**DocumentModel.from_orm(db_document).dict())
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении документа в БД: {e}")
-            raise
+        logger.info(f"Created initial record for document {db_document.id} with status UPLOADED")
+        return DocumentResponse.from_orm(db_document)
     
     def get_document(self, document_id: uuid.UUID) -> DocumentResponse:
         """Get document metadata by ID"""
@@ -344,17 +385,17 @@ class DocumentIngestionService:
             logger.error(f"Ошибка при получении текста документа {document_id}: {e}")
             raise
     
-    def get_documents(self, skip: int = 0, limit: int = 20) -> List[DocumentResponse]:
-        """Get list of documents with pagination"""
+    def get_documents(self, chat_id: Optional[uuid.UUID] = None, skip: int = 0, limit: int = 20) -> List[DocumentResponse]:
+        """Get list of documents with pagination, optionally filtered by chat_id"""
         try:
-            documents = self.repository.get_documents(skip=skip, limit=limit)
+            documents = self.repository.get_documents(chat_id=chat_id, skip=skip, limit=limit)
             return [DocumentResponse(**DocumentModel.from_orm(doc).dict()) for doc in documents]
         except Exception as e:
             logger.error(f"Ошибка при получении списка документов: {e}")
             raise
     
-    def delete_document(self, document_id: uuid.UUID):
-        """Delete document and its file"""
+    async def delete_document(self, document_id: uuid.UUID):
+        """Delete document, its file, and its vector chunks."""
         try:
             document = self.repository.get_document_by_id(document_id)
             if not document:
@@ -369,19 +410,21 @@ class DocumentIngestionService:
                     logger.info(f"Файл удален с диска: {file_path}")
                 except Exception as e:
                     logger.error(f"Ошибка при удалении файла {file_path}: {e}")
-                    raise FileStorageError(f"Failed to delete file {file_path}", str(e))
+                    # Non-critical error, log and continue
             
             # Delete chunks from vector store
             try:
-                asyncio.run(async_vector_store.delete_document_chunks_async(str(document_id)))
+                await async_vector_store.delete_document_chunks_async(str(document_id))
                 logger.info(f"Chunks deleted from vector store for document: {document_id}")
             except Exception as e:
-                logger.error(f"Error deleting chunks from vector store: {e}")
+                logger.error(f"Error deleting chunks from vector store, continuing deletion: {e}")
             
             # Delete from database
             self.repository.delete_document(document_id)
             logger.info(f"Документ удален из БД: {document_id}")
             
+        except DocumentNotFoundError:
+            raise  # Re-raise to be caught by caller
         except Exception as e:
             logger.error(f"Ошибка при удалении документа {document_id}: {e}")
             raise

@@ -38,9 +38,12 @@ class DocumentRepository:
         """Get document by ID"""
         return self.db.query(Document).filter(Document.id == document_id).first()
     
-    def get_documents(self, skip: int = 0, limit: int = 20) -> List[Document]:
-        """Get documents with pagination"""
-        return self.db.query(Document).order_by(desc(Document.created_at)).offset(skip).limit(limit).all()
+    def get_documents(self, chat_id: Optional[uuid.UUID] = None, skip: int = 0, limit: int = 20) -> List[Document]:
+        """Get documents with pagination, optionally filtered by chat_id"""
+        query = self.db.query(Document)
+        if chat_id:
+            query = query.filter(Document.chat_id == chat_id)
+        return query.order_by(desc(Document.created_at)).offset(skip).limit(limit).all()
     
     def get_document_count(self) -> int:
         """Get total number of documents"""

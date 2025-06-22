@@ -32,14 +32,13 @@ class PromptManager:
     
     @staticmethod
     def get_system_prompt() -> str:
-        """Get system prompt for RAG assistant"""
-        return """Ты помощник, который отвечает на вопросы, используя предоставленный контекст. 
-Отвечай кратко и по существу. Если в контексте нет информации для ответа, 
-честно скажи об этом."""
+        """Get system prompt for the assistant"""
+        return """Ты — DocMind, умный ассистент. Отвечай на вопросы развернуто и по существу.
+Если вопрос касается предоставленного контекста, основывай свой ответ на нем.
+Если контекста нет или он нерелевантен, используй свои общие знания.
+Всегда отвечай на русском языке."""
     
     @staticmethod
     def create_no_context_prompt(question: str) -> str:
-        """Create prompt when no context is available"""
-        return f"""Вопрос: {question}
-
-Ответ: Извините, не удалось найти релевантную информацию для ответа на ваш вопрос.""" 
+        """Create a direct prompt when no context is available."""
+        return question 

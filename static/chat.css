@@ -1,217 +1,314 @@
 @import url('https://fonts.googleapis.com/css2?family=Bigelow+Rules&family=Inter:wght@200;400&display=swap');
 
-body {
-    background-color: #000000;
-    margin: 0;
-    color: #F2F2F2; /* Установим белый цвет текста по умолчанию для контраста */
-    font-family: sans-serif; /* Установим базовый шрифт */
+/* ---------- Палитра и базовые переменные ---------- */
+:root {
+  --bg:             #000;
+  --panel-bg:       #010806;
+  --panel-line:     #1a1a1a;
+  --text:           #F2F2F2;
+  --text-muted:     rgba(242, 242, 242, .4);
+  --input-bg:       #191F1E;
+  --scroll:         #4a4a4a;
+  --scroll-hover:   #6a6a6a;
 }
 
-#app-container {
-    display: flex;
-    height: 100vh;
+/* ---------- Общий стиль ---------- */
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+}
+#app-container{display:flex;height:100vh;}
+#chat-container{flex:1;display:flex;flex-direction:column;}
+#chat-box{flex:1;padding:20px;overflow-y:auto;}
+
+/* ---------- Шапка ---------- */
+#header{
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  height:120px;
+  padding:0 20px;
+  background:var(--bg);
+  border-bottom:1px solid var(--panel-line);
+}
+#header h1{
+  margin:0;
+  font:48px 'Bigelow Rules',cursive;
+  -webkit-text-stroke:.2px var(--bg);
+}
+#profile-icon{cursor:pointer;color:var(--text);}
+
+/* ---------- Поле ввода ---------- */
+#input-container{
+  flex-shrink:0;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:20px 320px 40px;
+}
+.message-input-area{
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  padding:20px;
+  background:var(--input-bg);
+  border-radius:12px;
+  box-sizing:border-box;
+}
+#user-input{
+  flex:1;
+  min-height:44px;
+  max-height:150px;
+  padding:10px;
+  background:transparent;
+  border:none;
+  outline:none;
+  resize:none;
+  overflow-y:auto;
+  color:var(--text);
+  font:400 16px 'Inter',sans-serif;
+}
+#user-input::placeholder{
+  color:var(--text-muted);
+  font:200 20px 'Inter',sans-serif;
+}
+/* блок с кнопками под полем */
+.input-controls{display:flex;justify-content:space-between;align-items:center;padding-top:5px;}
+.controls-left,.controls-right{display:flex;align-items:center;gap:10px;}
+.control-btn{
+  display:flex;align-items:center;justify-content:center;
+  padding:5px;
+  background:transparent;border:none;cursor:pointer;
 }
 
-#chat-container {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
+/* ---------- История / боковая панель ---------- */
+#history-panel{
+  width:320px;
+  display:flex;
+  flex-direction:column;
+  padding:20px;
+  box-sizing:border-box;
+  background:var(--panel-bg);
+  border-right:1px solid var(--panel-line);
+  color:var(--text);
 }
-
-#header {
-    background-color: #000000;
-    padding: 0 20px;
-    border-bottom: 1px solid #1a1a1a;
-    height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between; /* Расталкиваем элементы по краям */
-    flex-shrink: 0; /* Шапка не должна сжиматься */
+#history-panel h2{
+  margin:20px 0 0;
+  padding-left:15px;
+  letter-spacing:1.5px;
+  font:200 16px 'Inter',sans-serif;
+  color:var(--text-muted);
 }
-
-#header h1 {
-    margin: 0;
-    font-size: 48px; /* Немного увеличим для такого шрифта */
-    color: #F2F2F2;
-    font-family: 'Bigelow Rules', cursive;
-    font-weight: normal; /* Убедимся, что браузер не пытается его сделать жирнее */
-    -webkit-text-stroke: 0.2px #000; /* Маленький трюк, чтобы сделать шрифт визуально тоньше */
+.panel-options{display:flex;flex-direction:column;padding-bottom:20px;border-bottom:1px solid var(--panel-line);}
+.panel-button{
+  display:flex;align-items:center;
+  padding:10px 15px;
+  border-radius:8px;
+  background:transparent;border:none;cursor:pointer;
+  color:var(--text);
+  font:400 16px 'Inter',sans-serif;
+  text-align:left;
+  transition:background .2s;
 }
+.panel-button:hover{background:var(--panel-line);}
+.panel-button svg{margin-right:15px;stroke:#8A8A8A;}
 
-#profile-icon {
-    cursor: pointer;
-    color: #F2F2F2;
-}
-
-#chat-box {
-    flex-grow: 1;
-    padding: 20px;
-    overflow-y: auto; /* Добавим прокрутку для сообщений */
-}
-
-#input-container {
-    padding: 20px 320px 40px 320px;
-    flex-shrink: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.message-input-area {
-    display: flex;
-    flex-direction: column; /* Вертикальное расположение: сначала текст, потом кнопки */
-    width: 100%;
-    background-color: #191F1E;
-    padding: 20px; /* Увеличиваем внутренние отступы */
-    border-radius: 12px; /* Добавляем сглаженные углы */
-    box-sizing: border-box;
-}
-
-#user-input {
-    flex-grow: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #F2F2F2;
-    font-family: 'Inter', sans-serif;
-    font-weight: 400; /* Обычный для читаемости */
-    font-size: 16px;
-    resize: none;
-    padding: 10px;
-    box-sizing: border-box;
-    min-height: 44px; /* Начальная высота */
-    max-height: 150px; /* Максимальная высота до появления скролла */
-    overflow-y: auto; /* Показываем скроллбар при переполнении */
-}
-
-#user-input::placeholder {
-    font-family: 'Inter', sans-serif;
-    font-weight: 200; /* Extra Light */
-    font-size: 20px;
-    color: rgba(242, 242, 242, 0.4);
-    opacity: 1; /* Для кроссбраузерности */
-}
-
-.input-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 5px;
-}
-
-.controls-left,
-.controls-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.control-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Удаляем старые, более специфичные стили */
-.attach-btn,
-#send-btn {
-    margin: 0;
-}
-
-/* Custom Scrollbar Styling */
+/* ---------- Scrollbars (chrome-like) ---------- */
 #user-input::-webkit-scrollbar,
-#chat-box::-webkit-scrollbar {
-    width: 8px;
-}
-
+#chat-box::-webkit-scrollbar{width:8px;}
 #user-input::-webkit-scrollbar-track,
-#chat-box::-webkit-scrollbar-track {
-    background: transparent;
-}
-
+#chat-box::-webkit-scrollbar-track{background:transparent;}
 #user-input::-webkit-scrollbar-thumb,
-#chat-box::-webkit-scrollbar-thumb {
-    background-color: #4a4a4a;
-    border-radius: 10px;
-    border: 2px solid #191F1E; /* Обводка в цвет фона поля ввода */
+#chat-box::-webkit-scrollbar-thumb{
+  background:var(--scroll);
+  border-radius:10px;
+  border:2px solid var(--input-bg);
 }
-
 #user-input::-webkit-scrollbar-thumb:hover,
-#chat-box::-webkit-scrollbar-thumb:hover {
-    background-color: #6a6a6a;
+#chat-box::-webkit-scrollbar-thumb:hover{background:var(--scroll-hover);}
+
+/* ---------- Фоновый паттерн ---------- */
+body::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  background:url('/assets/BGPattern.svg') repeat;
+  opacity:.22;
 }
 
-#history-panel {
-    width: 320px;
-    background-color: #010806;
-    padding: 20px;
-    box-sizing: border-box;
-    border-right: 1px solid #1a1a1a; /* Небольшая граница для разделения */
-    color: #F2F2F2;
+/* ---------- Список чатов ---------- */
+#chat-list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 5px;
+    margin-top: 20px;
+}
+
+#chat-list {
     display: flex;
     flex-direction: column;
+    gap: 8px;
 }
 
-#history-panel h2 {
-    margin-top: 20px; /* Отступ от линии сверху */
-    text-align: left; /* Выравнивание по левому краю */
-    padding-left: 15px; /* Отступ для выравнивания с кнопками */
-    font-family: 'Inter', sans-serif;
-    font-weight: 200; /* Extra Light */
-    font-size: 16px;
-    color: rgba(242, 242, 242, 0.4); /* #F2F2F2 с 40% прозрачностью */
-    letter-spacing: 1.5px; /* Немного увеличим расстояние между буквами */
-}
-
-.panel-options {
-    display: flex;
-    flex-direction: column;
-    padding-bottom: 20px; /* Отступ до линии снизу */
-    border-bottom: 1px solid #1a1a1a; /* Новая линия */
-}
-
-.panel-button {
+.chat-item {
     display: flex;
     align-items: center;
-    background-color: transparent;
-    border: none;
-    color: #F2F2F2;
-    padding: 10px 15px;
+    justify-content: space-between;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     cursor: pointer;
-    text-align: left;
-    font-family: 'Inter', sans-serif;
-    font-weight: 400; /* Regular */
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.chat-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.chat-item.active {
+    background: rgba(74, 144, 226, 0.3);
+    border-color: #4a90e2;
+}
+
+.chat-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-item-name {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-item-info {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-item-date {
+    font-size: 11px;
+}
+
+.chat-item-docs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chat-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.chat-item:hover .chat-item-actions {
+    opacity: 1;
+}
+
+.chat-action-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.chat-action-btn.delete-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.chat-action-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Empty state */
+.chat-list-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.chat-list-empty svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+
+.chat-list-empty h3 {
     font-size: 16px;
-    transition: background-color 0.2s;
+    margin-bottom: 8px;
+    color: rgba(255, 255, 255, 0.7);
 }
 
-.panel-button:not(:last-child) {
-    margin-bottom: 0px; /* Точный отступ между кнопками */
+.chat-list-empty p {
+    font-size: 14px;
+    line-height: 1.4;
 }
 
-.panel-button:hover {
-    background-color: #1a1a1a;
+/* Loading state */
+.chat-list-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: rgba(255, 255, 255, 0.6);
 }
 
-.panel-button svg {
-    margin-right: 15px;
-    stroke: #8A8A8A; /* Цвет иконок */
+.chat-list-loading svg {
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
 }
 
-body::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: url('/assets/BGPattern.svg'); /* Путь к вашему паттерну */
-    background-repeat: repeat;
-    opacity: 0.22; /* Здесь можно регулировать прозрачность паттерна от 0.0 до 1.0 */
-    z-index: -1; /* Размещаем паттерн под контентом */
-} 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Scrollbar для списка чатов */
+#chat-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+#chat-list-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#chat-list-container::-webkit-scrollbar-thumb {
+    background: var(--scroll);
+    border-radius: 10px;
+}
+
+#chat-list-container::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-hover);
+}

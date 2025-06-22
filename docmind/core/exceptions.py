@@ -2,15 +2,21 @@
 Business logic exceptions for DocMind application
 These are domain-specific exceptions that represent business rule violations
 """
-from typing import Optional
+from typing import Optional, Any
 
 
 class DocMindBusinessException(Exception):
-    """Base exception for DocMind business logic"""
-    def __init__(self, message: str, details: Optional[str] = None):
+    """Base exception for all business logic errors"""
+    
+    def __init__(self, message: str, details: Optional[Any] = None):
         self.message = message
         self.details = details
-        super().__init__(self.message)
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        if self.details:
+            return f"{self.message} (Details: {self.details})"
+        return self.message
 
 
 class DocumentValidationError(DocMindBusinessException):
